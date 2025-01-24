@@ -54,6 +54,7 @@ CREATE TABLE apporder (
 CREATE TABLE order_item(
     order_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
+    count BIGINT,
     PRIMARY KEY (order_id, product_id),
     CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES apporder(id),
     CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product(id)
