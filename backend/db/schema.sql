@@ -1,9 +1,4 @@
-CREATE SCHEMA appuser;
-CREATE SCHEMA auth;
-CREATE SCHEMA product;
-CREATE SCHEMA apporder;
-
-CREATE TABLE appuser.data (
+CREATE TABLE appuser (
     id BIGSERIAL PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     forename TEXT NOT NULL,
@@ -11,55 +6,55 @@ CREATE TABLE appuser.data (
     age SMALLINT NOT NULL
 );
 
-CREATE TABLE auth.password (
+CREATE TABLE password (
     user_id BIGINT PRIMARY KEY,
     password TEXT NOT NULL,
-    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES appuser.data(id)
+    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES appuser(id)
 );
-CREATE TABLE auth.totp (
+CREATE TABLE totp (
     user_id BIGINT PRIMARY KEY,
     secret BYTEA NOT NULL
 );
-CREATE TABLE product.product (
+CREATE TABLE product (
     id BIGSERIAL PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     description TEXT NOT NULL,
     stock BIGINT NOT NULL CHECK (stock >= 0),
     price BIGINT NOT NULL CHECK (price > 0)
 );
-CREATE TABLE product.category (
+CREATE TABLE category (
     id BIGSERIAL PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     description TEXT NOT NULL
 );
-CREATE TABLE product.category_membership (
+CREATE TABLE category_membership (
     product_id BIGINT, 
     category_id BIGINT,
     PRIMARY KEY(product_id, category_id),
-    CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product.product(id),
-    CONSTRAINT fk_category FOREIGN KEY (category_id) REFERENCES product.category(id)
+    CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product(id),
+    CONSTRAINT fk_category FOREIGN KEY (category_id) REFERENCES category(id)
 );
-CREATE TABLE product.offer (
+CREATE TABLE offer (
     id BIGSERIAL PRIMARY KEY,
     percentage SMALLINT NOT NULL,
     label TEXT
 );
-CREATE TABLE product.offer_membership (
+CREATE TABLE offer_membership (
     product_id BIGINT,
     offer_id BIGINT,
     PRIMARY KEY (product_id, offer_id)
 );
-CREATE TABLE apporder.apporder (
+CREATE TABLE apporder (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     order_placed TIMESTAMP NOT NULL,
     amount_charged BIGINT NOT NULL,
-    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES appuser.data(id)
+    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES appuser(id)
 );
-CREATE TABLE apporder.order_item(
+CREATE TABLE order_item(
     order_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
     PRIMARY KEY (order_id, product_id),
-    CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES apporder.apporder(id),
-    CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product.product(id)
+    CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES apporder(id),
+    CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product(id)
 );
