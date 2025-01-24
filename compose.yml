@@ -1,0 +1,16 @@
+services:
+  db:
+    build: backend/db
+    secrets:
+      - db_password
+    ports:
+      - "5432:5432"
+
+  api:
+    build: backend/api
+    secrets:
+      - db_password
+
+secrets:
+  db_password:
+    environment: DB_PASSWORD

@@ -1,0 +1,13 @@
+[package]
+name = "securecart-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+argon2 = "0.5.3"
+axum = { version = "0.8.1", features = ["json"] }
+jwt = "0.16.0"
+regex = "1.11.1"
+serde = "1.0.217"
+sqlx = { version = "0.8.3", features = ["postgres", "macros", "runtime-tokio"] }
+tokio = { version = "1.43.0", features = ["tracing", "rt-multi-thread"] } 
