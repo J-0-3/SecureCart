@@ -1,7 +1,7 @@
 CREATE SCHEMA appuser;
 CREATE SCHEMA auth;
 CREATE SCHEMA product;
-CREATE SCHEMA order;
+CREATE SCHEMA apporder;
 
 CREATE TABLE appuser.data (
     id BIGSERIAL PRIMARY KEY,
@@ -24,7 +24,7 @@ CREATE TABLE product.product (
     id BIGSERIAL PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     description TEXT NOT NULL,
-    stock BIGINT NOT NULL CHECK (stock >= 0);
+    stock BIGINT NOT NULL CHECK (stock >= 0),
     price BIGINT NOT NULL CHECK (price > 0)
 );
 CREATE TABLE product.category (
@@ -49,17 +49,17 @@ CREATE TABLE product.offer_membership (
     offer_id BIGINT,
     PRIMARY KEY (product_id, offer_id)
 );
-CREATE TABLE order.order (
+CREATE TABLE apporder.apporder (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    order_placed DATETIME NOT NULL,
+    order_placed TIMESTAMP NOT NULL,
     amount_charged BIGINT NOT NULL,
     CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES appuser.data(id)
 );
-CREATE TABLE order.order_item(
+CREATE TABLE apporder.order_item(
     order_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
     PRIMARY KEY (order_id, product_id),
-    CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES order.order(id),
+    CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES apporder.apporder(id),
     CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product.product(id)
 );

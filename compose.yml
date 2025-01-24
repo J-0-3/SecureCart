@@ -3,13 +3,30 @@ services:
     build: backend/db
     secrets:
       - db_password
-    ports:
-      - "5432:5432"
 
   api:
     build: backend/api
     secrets:
       - db_password
+    profiles:
+      - run
+
+  dev:
+    build: 
+      context: dev
+      args:
+        - DB_HOST=db
+        - DB_USERNAME=securecart
+        - DB_PASSWORD=${DEV_DB_PASSWORD}
+        - DB_DATABASE=securecart
+    profiles:
+      - dev
+    volumes:
+      - ./backend:/root/app/backend
+      - ./frontend:/root/app/frontend
+      - ./.git:/root/app/.git
+    hostname: securecart-dev
+
 
 secrets:
   db_password:
