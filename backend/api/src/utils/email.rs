@@ -27,7 +27,7 @@ impl TryFrom<String> for EmailAddress {
 }
 
 impl From<EmailAddress> for String {
-    fn from(addr: EmailAddress) -> String {
+    fn from(addr: EmailAddress) -> Self {
         let EmailAddress(s) = addr;
         s
     }
