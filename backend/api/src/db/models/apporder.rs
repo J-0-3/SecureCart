@@ -25,7 +25,7 @@ impl AppOrderInsert {
 }
 
 impl AppOrder {
-    pub fn id(&self) -> i64 {
+    pub const fn id(&self) -> i64 {
         self.id
     }
     pub async fn select_one(id: i64, db_client: &PgPool) -> Result<Option<Self>, Error> {

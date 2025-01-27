@@ -35,7 +35,7 @@ impl Category {
             .fetch_all(db_client)
             .await
     }
-    pub fn id(&self) -> i64 {
+    pub const fn id(&self) -> i64 {
         self.id
     }
     pub async fn update(&self, db_client: &PgPool) -> Result<(), Error> {

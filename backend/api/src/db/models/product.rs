@@ -23,10 +23,10 @@ impl ProductInsert {
             price: price as i64,
         }
     }
-    pub fn stock(&self) -> u32 {
+    pub const fn stock(&self) -> u32 {
         self.stock as u32
     }
-    pub fn price(&self) -> u32 {
+    pub const fn price(&self) -> u32 {
         self.price as u32
     }
     pub async fn store(self, db_client: &PgPool) -> Result<Product, Error> {
@@ -53,13 +53,13 @@ impl Product {
     pub fn set_price(&mut self, price: u32) {
         self.price = price as i64
     }
-    pub fn stock(&self) -> u32 {
+    pub const fn stock(&self) -> u32 {
         self.stock as u32
     }
-    pub fn price(&self) -> u32 {
+    pub const fn price(&self) -> u32 {
         self.price as u32
     }
-    pub fn id(&self) -> i64 {
+    pub const fn id(&self) -> i64 {
         self.id
     }
     pub async fn update(&self, db_client: &PgPool) -> Result<(), Error> {

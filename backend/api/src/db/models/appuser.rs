@@ -44,13 +44,13 @@ impl AppUserInsert {
 }
 
 impl AppUser {
-    pub fn id(&self) -> i64 {
+    pub const fn id(&self) -> i64 {
         self.id
     }
     pub fn email(&self) -> EmailAddress {
         EmailAddress::try_from(self.email.clone()).unwrap()
     }
-    pub fn age(&self) -> u8 {
+    pub const fn age(&self) -> u8 {
         self.age as u8
     }
     pub async fn select_one(id: i64, db_client: &PgPool) -> Result<Option<Self>, Error> {
