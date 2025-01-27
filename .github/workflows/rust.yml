@@ -1,4 +1,4 @@
-name: Backend-Api-Cargo-Build
+name: Backend-Api-Cargo
 
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
+    - name: Clippy
+      run: cargo clippy --all -- -D clippy::all -D clippy::pedantic -D clippy::nursery -D clippy::cargo
       env:
         SQLX_OFFLINE: true
     - name: Run tests
