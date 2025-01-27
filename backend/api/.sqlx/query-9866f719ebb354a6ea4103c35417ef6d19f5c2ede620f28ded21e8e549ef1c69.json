@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM appuser",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "forename",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "surname",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "age",
+        "type_info": "Int2"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9866f719ebb354a6ea4103c35417ef6d19f5c2ede620f28ded21e8e549ef1c69"
+}

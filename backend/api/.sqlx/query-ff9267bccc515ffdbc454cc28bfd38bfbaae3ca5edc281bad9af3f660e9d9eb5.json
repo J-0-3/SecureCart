@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO product (name, description, stock, price) VALUES ($1, $2, $3, $4) RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "stock",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "price",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ff9267bccc515ffdbc454cc28bfd38bfbaae3ca5edc281bad9af3f660e9d9eb5"
+}
