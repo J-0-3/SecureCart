@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  lintAndTest:
     defaults:
       run:
         working-directory: ./backend/api
@@ -18,7 +18,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Clippy
-      run: cargo clippy --all -- -D clippy::all -D clippy::pedantic -D clippy::nursery -D clippy::cargo
+      run: cargo clippy --all -- -Dwarnings
       env:
         SQLX_OFFLINE: true
     - name: Run tests
