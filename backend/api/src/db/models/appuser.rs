@@ -27,7 +27,7 @@ impl AppUserInsert {
             email: email.into(),
             forename: forename.to_string(),
             surname: surname.to_string(),
-            age: age as i16,
+            age: i16::from(age),
         }
     }
 
@@ -50,8 +50,8 @@ impl AppUser {
     pub fn email(&self) -> EmailAddress {
         EmailAddress::try_from(self.email.clone()).unwrap()
     }
-    pub const fn age(&self) -> u8 {
-        self.age as u8
+    pub fn age(&self) -> u8 {
+        u8::try_from(self.age).expect("What hte fuck")
     }
     pub async fn select_one(id: i64, db_client: &PgPool) -> Result<Option<Self>, Error> {
         query_as!(Self, "SELECT * FROM appuser WHERE id = $1", &id)

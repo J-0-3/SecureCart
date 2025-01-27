@@ -3,7 +3,7 @@ use sqlx::{query, query_as, Error, PgPool};
 pub struct ProductInsert {
     pub name: String,
     pub description: String,
-    stock: i64,
+    stock: i64, // i64s are used internally to match Postgres BIGINTEGER types
     price: i64,
 }
 pub struct Product {
@@ -19,15 +19,15 @@ impl ProductInsert {
         Self {
             name: name.to_owned(),
             description: description.to_owned(),
-            stock: stock as i64,
-            price: price as i64,
+            stock: i64::from(stock),
+            price: i64::from(price),
         }
     }
-    pub const fn stock(&self) -> u32 {
-        self.stock as u32
+    pub fn stock(&self) -> u32 {
+        u32::try_from(self.stock).expect("Stock value is invalid within model. This should never happen.")
     }
-    pub const fn price(&self) -> u32 {
-        self.price as u32
+    pub fn price(&self) -> u32 {
+        u32::try_from(self.price).expect("Price value is invalid within model. This should never happen.")
     }
     pub async fn store(self, db_client: &PgPool) -> Result<Product, Error> {
         query_as!(
@@ -48,16 +48,16 @@ impl Product {
         query_as!(Self, "SELECT * FROM product").fetch_all(db_client).await
     }
     pub fn set_stock(&mut self, stock: u32) {
-        self.stock = stock as i64
+        self.stock = i64::from(stock);
     }
     pub fn set_price(&mut self, price: u32) {
-        self.price = price as i64
+        self.price = i64::from(price);
     }
-    pub const fn stock(&self) -> u32 {
-        self.stock as u32
+    pub fn stock(&self) -> u32 {
+        u32::try_from(self.stock).expect("Stock value in database is out of allowed range")
     }
-    pub const fn price(&self) -> u32 {
-        self.price as u32
+    pub fn price(&self) -> u32 {
+        u32::try_from(self.price).expect("Price value in database is out of allowed range")
     }
     pub const fn id(&self) -> i64 {
         self.id
