@@ -2,6 +2,12 @@
 name = "securecart-api"
 version = "0.1.0"
 edition = "2021"
+description = "The API for the SecureCart ecommerce platform (my CCSE coursework)"
+license = "MIT"
+repository = "https://github.com/j-0-3/SecureCart"
+readme = "../../README.md"
+keywords = ["securecart"]
+categories = ["web-programming"]
 
 [dependencies]
 argon2 = "0.5.3"
