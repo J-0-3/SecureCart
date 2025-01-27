@@ -13,13 +13,14 @@ pub static DB_DATABASE: LazyLock<String> = LazyLock::new(|| {
     std::env::var("DB_DATABASE").expect("DB_DATABASE not provided in environment variables")
 });
 
-pub static DB_PASSWORD: LazyLock<String> =
-    LazyLock::new(|| {
-        std::env::var("DB_PASSWORD").unwrap_or(
-            read_secret(&std::env::var("DB_PASSWORD_DOCKER_SECRET").expect(
-            "Neither DB_PASSWORD or DB_PASSWORD_DOCKER_SECRET provided in environment variables",
-        )).expect("Failed to read docker secret."))
-    });
+pub static DB_PASSWORD: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("DB_PASSWORD").unwrap_or_else(|_| {
+        let secret_path = std::env::var("DB_PASSWORD_DOCKER_SECRET").expect(
+            "Neither DB_PASSWORD nor DB_PASSWORD_DOCKER_SECRET provided in environment variables",
+        );
+        read_secret(&secret_path).expect("Failed to read DB_PASSWORD docker secret")
+    })
+});
 
 pub static DB_URL: LazyLock<String> = LazyLock::new(|| {
     format!(
