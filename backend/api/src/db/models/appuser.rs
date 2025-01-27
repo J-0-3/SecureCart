@@ -1,22 +1,37 @@
+//! Models mapping to the appuser database table. Represents a user and their
+//! associated information.
 use crate::utils::email::EmailAddress;
 use sqlx::{query, query_as, Error, PgPool};
 
+/// INSERT model for an `AppUser`. Used ONLY when creating a new user.
 struct AppUserInsert {
+    /// The user's email address. Private to enforce validity.
     email: String,
+    /// The user's forename.
     pub forename: String,
+    /// The user's surname.
     pub surname: String,
+    /// The user's age. Signed to match Postgres SMALLINT, private to enforce range.
     age: i16,
 }
 
+/// An `AppUser` which is stored in the database. Can only be constructed by
+/// reading it from the database.
 pub struct AppUser {
+    /// The `AppUser`'s ID primary key. Private to restrict construction.
     id: i64,
+    /// The user's email address. Private to enforce validity.
     email: String,
+    /// The user's forename.
     pub forename: String,
+    /// The user's surname.
     pub surname: String,
+    /// The user's age.
     age: i16,
 }
 
 impl AppUserInsert {
+    /// Construct a new `AppUser` INSERT model.
     pub fn new(
         email: EmailAddress,
         forename: &str,
@@ -25,12 +40,13 @@ impl AppUserInsert {
     ) -> Self {
         Self {
             email: email.into(),
-            forename: forename.to_string(),
-            surname: surname.to_string(),
+            forename: forename.to_owned(),
+            surname: surname.to_owned(),
             age: i16::from(age),
         }
     }
 
+    /// Store this INSERT model in the database and return a complete `AppUser` model.
     pub async fn store(self, db_client: &PgPool) -> Result<AppUser, Error> {
         query_as!(
             AppUser,
@@ -44,25 +60,32 @@ impl AppUserInsert {
 }
 
 impl AppUser {
+    /// Get the `AppUser`'s ID primary key.
     pub const fn id(&self) -> i64 {
         self.id
     }
+    /// Get the user's email address.
     pub fn email(&self) -> EmailAddress {
-        EmailAddress::try_from(self.email.clone()).unwrap()
+        EmailAddress::try_from(self.email.clone())
+            .expect("Invalid email format read from the database.")
     }
+    /// Get the user's age.
     pub fn age(&self) -> u8 {
-        u8::try_from(self.age).expect("What hte fuck")
+        u8::try_from(self.age).expect("Invalid age range read from the database.")
     }
+    /// Select an `AppUser` from the database by ID.
     pub async fn select_one(id: i64, db_client: &PgPool) -> Result<Option<Self>, Error> {
         query_as!(Self, "SELECT * FROM appuser WHERE id = $1", &id)
             .fetch_optional(db_client)
             .await
     }
+    /// Retrieve all `AppUser` records in the database.
     pub async fn select_all(db_client: &PgPool) -> Result<Vec<Self>, Error> {
         query_as!(Self, "SELECT * FROM appuser")
             .fetch_all(db_client)
             .await
     }
+    /// Update the database record to match the model's current state.
     pub async fn update(&self, db_client: &PgPool) -> Result<(), Error> {
         query!(
             "UPDATE appuser SET email = $1, forename = $2, surname = $3, age = $4 WHERE id = $5",
@@ -76,7 +99,8 @@ impl AppUser {
         .await?;
         Ok(())
     }
-
+    /// Delete the corresponding record from the database. Also consumes the
+    /// model itself for consistency.
     pub async fn delete(self, db_client: &PgPool) -> Result<(), Error> {
         query!("DELETE FROM appuser WHERE id = $1", self.id)
             .execute(db_client)
