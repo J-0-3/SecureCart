@@ -2,12 +2,43 @@
 name = "securecart-api"
 version = "0.1.0"
 edition = "2021"
+description = "The API for the SecureCart ecommerce platform (my CCSE coursework)"
+license = "MIT"
+repository = "https://github.com/j-0-3/SecureCart"
+readme = "../../README.md"
+keywords = ["securecart"]
+categories = ["web-programming"]
 
 [dependencies]
 argon2 = "0.5.3"
 axum = { version = "0.8.1", features = ["json"] }
-jwt = "0.16.0"
 regex = "1.11.1"
-sea-orm = { version = "1.1.4", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
 serde = "1.0.217"
+sqlx = { version = "0.8.3", features = ["chrono", "postgres", "runtime-tokio", "time"] }
+time = { version = "0.3.37", features = ["macros"] }
 tokio = { version = "1.43.0", features = ["tracing", "rt-multi-thread"] } 
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+restriction = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+implicit_return = "allow"
+expect_used = "allow"
+module_name_repetitions="allow"
+question_mark_used="allow"
+print_stderr = "allow"
+print_stdout = "allow"
+pub_use = "allow"
+pub_with_shorthand = "allow"
+single_call_fn = "allow"
+arbitrary_source_item_ordering = "allow"
+mod_module_files = "allow"
+single_char_lifetime_names = "allow"
+partial_pub_fields = "allow"
+blanket_clippy_restriction_lints = "allow"

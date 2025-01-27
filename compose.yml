@@ -3,6 +3,8 @@ services:
     build: backend/db
     secrets:
       - db_password
+    ports:
+      - 5432:5432
 
   api:
     build: backend/api
@@ -22,9 +24,7 @@ services:
     profiles:
       - dev
     volumes:
-      - ./backend:/root/app/backend
-      - ./frontend:/root/app/frontend
-      - ./.git:/root/app/.git
+      - .:/root/app
     hostname: securecart-dev
 
 
