@@ -18,7 +18,7 @@ struct AppUserInsert {
 /// An `AppUser` which is stored in the database. Can only be constructed by
 /// reading it from the database.
 pub struct AppUser {
-    /// The `AppUser`'s ID primary key. Private to restrict construction.
+    /// The user's ID primary key.
     id: i64,
     /// The user's email address. Private to enforce validity.
     email: String,

@@ -6,12 +6,14 @@ mod db;
 mod routes;
 mod utils;
 
-use axum::routing::get;
+use axum::{routing::get, extract::Json};
 use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() {
-    let app = axum::Router::new().route("/", get(root));
+    let app = axum::Router::new()
+        .route("/", get(root))
+        .nest("/auth", routes::auth::create_router());
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
         .expect("Failed to bind listener");
@@ -21,6 +23,6 @@ async fn main() {
 }
 
 /// The / route is simply used as an availability check.
-async fn root() -> String {
-    "API is running!".to_owned()
+async fn root() -> Json<String> {
+    Json("API is running!".to_owned())
 }
