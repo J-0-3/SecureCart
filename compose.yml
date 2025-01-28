@@ -3,8 +3,6 @@ services:
     build: backend/db
     secrets:
       - db_password
-    ports:
-      - 5432:5432
 
   redis:
     image: redis:latest

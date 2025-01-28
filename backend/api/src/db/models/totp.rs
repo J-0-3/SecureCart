@@ -34,10 +34,14 @@ impl TotpInsert {
 }
 impl Totp {
     /// Select a Totp record from the database by the associated user ID.
-    pub async fn select(user_id: i64, db_client: &PgPool) -> Result<Option<Self>, Error> {
-        query_as!(Self, "SELECT * FROM totp WHERE user_id = $1", user_id)
-            .fetch_optional(db_client)
-            .await
+    pub async fn select(user_id: u64, db_client: &PgPool) -> Result<Option<Self>, Error> {
+        query_as!(
+            Self,
+            "SELECT * FROM totp WHERE user_id = $1",
+            i64::try_from(user_id).expect("User ID out of range for Postgres BIGINT")
+        )
+        .fetch_optional(db_client)
+        .await
     }
     /// Delete the model from the database. Also consumes the model for the sake
     /// of consistency.

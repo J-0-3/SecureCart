@@ -61,8 +61,8 @@ impl AppUserInsert {
 
 impl AppUser {
     /// Get the `AppUser`'s ID primary key.
-    pub const fn id(&self) -> i64 {
-        self.id
+    pub fn id(&self) -> u64 {
+        u64::try_from(self.id).expect("Invalid user ID in database")
     }
     /// Get the user's email address.
     pub fn email(&self) -> EmailAddress {
@@ -78,6 +78,10 @@ impl AppUser {
         query_as!(Self, "SELECT * FROM appuser WHERE id = $1", &id)
             .fetch_optional(db_client)
             .await
+    }
+    /// Select an `AppUser` from the database by email.
+    pub async fn select_by_email(email: &str, db_client: &PgPool) -> Result<Option<Self>, Error> {
+        query_as!(Self, "SELECT * FROM appuser WHERE email = $1", email).fetch_optional(db_client).await
     }
     /// Retrieve all `AppUser` records in the database.
     pub async fn select_all(db_client: &PgPool) -> Result<Vec<Self>, Error> {
