@@ -15,10 +15,12 @@ RUN cargo build --release --target=x86_64-unknown-linux-musl
 
 FROM scratch
 ARG DB_HOST
+ARG REDIS_HOST
 
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/securecart-api /app/service
 
 ENV DB_HOST=$DB_HOST
+ENV REDIS_HOST=$REDIS_HOST
 ENV DB_PASSWORD_DOCKER_SECRET=db_password
 
 CMD ["./app/service"]

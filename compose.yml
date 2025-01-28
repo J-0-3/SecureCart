@@ -6,8 +6,16 @@ services:
     ports:
       - 5432:5432
 
+  redis:
+    image: redis:latest
+
+
   api:
-    build: backend/api
+    build: 
+      context: backend/api
+      args:
+        - DB_HOST=db
+        - REDIS_HOST=redis
     secrets:
       - db_password
     profiles:
@@ -21,11 +29,13 @@ services:
         - DB_USERNAME=securecart
         - DB_PASSWORD=${DEV_DB_PASSWORD}
         - DB_DATABASE=securecart
+        - REDIS_HOST=redis
     profiles:
       - dev
     volumes:
       - .:/root/app
     hostname: securecart-dev
+
 
 
 secrets:

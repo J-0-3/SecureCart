@@ -12,6 +12,9 @@ categories = ["web-programming"]
 [dependencies]
 argon2 = "0.5.3"
 axum = { version = "0.8.1", features = ["json"] }
+axum-extra = { version = "0.10.0", features = ["cookie"] }
+rdis = "0.0.0"
+redis = { version = "0.28.2", default-features = false, features = ["tokio-comp", "ahash"] }
 regex = "1.11.1"
 serde = "1.0.217"
 sqlx = { version = "0.8.3", features = ["chrono", "postgres", "runtime-tokio", "time"] }
