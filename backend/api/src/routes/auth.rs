@@ -2,6 +2,7 @@
 use crate::{controllers::auth, state::AppState};
 use axum::{
     extract::{Json, State},
+    http::StatusCode,
     routing::{get, post},
     Router,
 };
@@ -54,7 +55,7 @@ async fn authenticate(
     cookies: CookieJar,
     State(state): State<AppState>,
     Json(body): Json<AuthenticateRequest>,
-) -> axum::response::Result<(CookieJar, Json<AuthenticateResponse>), axum::http::StatusCode> {
+) -> Result<(CookieJar, Json<AuthenticateResponse>), StatusCode> {
     let session = auth::authenticate(
         &body.email,
         body.credential,
@@ -62,8 +63,14 @@ async fn authenticate(
         &mut state.redis_conn.clone(),
     )
     .await
-    .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
-    .ok_or(axum::http::StatusCode::UNAUTHORIZED)?;
+    .map_err(|err| {
+        eprintln!("SQLx error while authenticating: {err}.");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or_else(|| {
+        eprintln!("Failed authentication as {}.", body.email);
+        StatusCode::UNAUTHORIZED
+    })?;
     let (mfa_required, session_cookie) = match session {
         auth::SessionToken::Full(inner) => (false, inner),
         auth::SessionToken::Partial(inner) => (true, inner),

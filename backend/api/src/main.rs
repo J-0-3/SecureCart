@@ -16,7 +16,7 @@ async fn main() {
         .await
         .expect("Could not connect to to Postgres");
     let redis_conn = redis::Client::open(constants::redis::REDIS_URL.clone())
-        .expect("Could not connect to redis")
+        .expect("Could not connect to Redis")
         .get_multiplexed_async_connection()
         .await
         .expect("Could not get async Redis connection");
