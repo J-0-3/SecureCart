@@ -3,8 +3,6 @@ services:
     build: backend/db
     secrets:
       - db_password
-    ports:
-      - 5432:5432
 
   redis:
     image: redis:latest
@@ -39,6 +37,33 @@ services:
       - .:/root/app
     hostname: securecart-dev
 
+  pgadmin:
+    image: dpage/pgadmin4
+    ports: 
+      - 8000:80
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=dev@securecart.com
+      - PGADMIN_DEFAULT_PASSWORD=${DEV_DB_PASSWORD}
+    profiles:
+      - dev
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - 5540:5540
+    profiles:
+      - dev
+
+  pgweb:
+    image: sosedoff/pgweb
+    ports:
+      - 8081:8081
+    profiles:
+      - dev
+    environment:
+      - PGWEB_AUTH_USER=securecart
+      - PGWEB_AUTH_PASS=${DEV_DB_PASSWORD}
+      - PGWEB_DATABASE_URL=postgres://securecart:${DEV_DB_PASSWORD}@db/securecart?sslmode=disable
 
 
 secrets:
