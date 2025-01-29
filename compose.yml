@@ -3,21 +3,26 @@ services:
     build: backend/db
     secrets:
       - db_password
+    ports:
+      - 5432:5432
 
   redis:
     image: redis:latest
-
 
   api:
     build: 
       context: backend/api
       args:
+        - DB_USERNAME=securecart
+        - DB_DATABASE=securecart
         - DB_HOST=db
         - REDIS_HOST=redis
     secrets:
       - db_password
     profiles:
       - run
+    ports:
+      - 8080:8080
 
   dev:
     build: 

@@ -1,13 +1,19 @@
 //! Routes under /auth handling authentication related mechanisms.
-use crate::controllers::auth;
-use axum::{extract::{Json, State}, routing::get, Router};
+use crate::{controllers::auth, state::AppState};
+use axum::{
+    extract::{Json, State},
+    routing::{get, post},
+    Router,
+};
+use axum_extra::extract::{cookie::Cookie, CookieJar};
 use serde::{Deserialize, Serialize};
 
 /// Create a router for the /auth route.
-pub fn create_router() -> Router {
+pub fn create_router() -> Router<AppState> {
     Router::new()
         .route("/", get(root))
         .route("/methods", get(list_methods))
+        .route("/login", post(authenticate))
 }
 
 /// Simply returns a happy message :)
@@ -44,4 +50,26 @@ struct AuthenticateResponse {
     pub mfa_required: bool,
 }
 
-
+async fn authenticate(
+    cookies: CookieJar,
+    State(state): State<AppState>,
+    Json(body): Json<AuthenticateRequest>,
+) -> axum::response::Result<(CookieJar, Json<AuthenticateResponse>), axum::http::StatusCode> {
+    let session = auth::authenticate(
+        &body.email,
+        body.credential,
+        &state.db_conn,
+        &mut state.redis_conn.clone(),
+    )
+    .await
+    .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(axum::http::StatusCode::UNAUTHORIZED)?;
+    let (mfa_required, session_cookie) = match session {
+        auth::SessionToken::Full(inner) => (false, inner),
+        auth::SessionToken::Partial(inner) => (true, inner),
+    };
+    Ok((
+        cookies.add(Cookie::build(("SESSION", session_cookie)).http_only(true)),
+        Json(AuthenticateResponse { mfa_required }),
+    ))
+}

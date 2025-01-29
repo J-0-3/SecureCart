@@ -123,8 +123,8 @@ impl SessionToken {
             token = Self::generate();
             let _: () = redis_conn.hset_nx(hash_name, &token, user_id).await?;
             // Continue generating if the generated token was already taken.
-            let set_user_id: String = redis_conn.hget(hash_name, &token).await?;
-            if set_user_id == token {
+            let set_user_id: u64 = redis_conn.hget(hash_name, &token).await?;
+            if set_user_id == user_id {
                 break;
             }
         }
