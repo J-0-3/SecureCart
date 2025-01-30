@@ -6,6 +6,7 @@
         "./env.dev.compose.yml"
     ],
     "service": "devcontainer",
-    "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"]
+    "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"],
+    "workspaceFolder": "/workspace"
     // "forwardPorts": ["redisinsight:5540", "portainer:9000", "pgadmin:80"]
 }
