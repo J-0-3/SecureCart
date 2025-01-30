@@ -1,0 +1,17 @@
+dev-env:
+  build: 
+    context: dev-env
+    args:
+      - DB_HOST=db
+      - DB_USERNAME=securecart
+      - DB_PASSWORD=${DEV_DB_PASSWORD}
+      - DB_DATABASE=securecart
+      - REDIS_HOST=redis
+  profiles:
+    - dev
+  volumes:
+    - .:/root/app
+    - ${XDG_RUNTIME_DIR}/docker.sock:/var/run/docker.sock
+  hostname: securecart-dev
+  ports:
+    - '127.0.0.1:9999:9999' # for code-server

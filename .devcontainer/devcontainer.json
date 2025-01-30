@@ -1,0 +1,9 @@
+{
+    "name": "Securecart Development Environment",
+    "dockerComposeFile": [
+        "../compose.yml",
+        "../devtools.compose.yml",
+        "./devenv.compose.yml"
+    ],
+    "service": "dev-env"
+}

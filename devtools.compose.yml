@@ -1,0 +1,32 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4
+    ports: 
+      - '127.0.0.1:8000:80'
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=dev@securecart.com
+      - PGADMIN_DEFAULT_PASSWORD=${DEV_DB_PASSWORD}
+    profiles:
+      - dev
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - '127.0.0.1:5540:5540'
+    profiles:
+      - dev
+    depends_on:
+      redis:
+        condition: service_started
+        restart: true
+        
+  portainer:
+    image: portainer/portainer-ce
+    volumes:
+      - /run/user/1000/docker.sock:/var/run/docker.sock
+    ports:
+      - '127.0.0.1:9000:9000'
