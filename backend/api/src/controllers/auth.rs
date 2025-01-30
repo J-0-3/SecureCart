@@ -1,7 +1,11 @@
 //! Controllers which manage authentication.
 use crate::{
     constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT},
-    db::models::{appuser::AppUser, password::Password, totp::Totp},
+    db::models::{
+        appuser::AppUser,
+        password::Password,
+        totp::{self, Totp},
+    },
 };
 use rand::{rngs::StdRng, Rng as _, SeedableRng as _};
 use redis::{aio::MultiplexedConnection, AsyncCommands as _};
@@ -103,9 +107,11 @@ pub enum SessionToken {
 impl SessionToken {
     /// Generate a cryptographically secure random 24-byte session token.
     fn generate() -> String {
-        let rng = StdRng::from_os_rng();
-        rng.random_iter()
-            .take(24)
+        let mut rng = StdRng::from_entropy();
+        let mut token_buf: [u8; 24] = [0; 24];
+        rng.fill(&mut token_buf);
+        token_buf
+            .into_iter()
             .fold(String::new(), |acc: String, x: u8| format!("{acc}{x:x}"))
     }
     /// Create a new session token for a user.
@@ -137,11 +143,29 @@ impl SessionToken {
         })
     }
     /// Get the user ID authenticated by this session token.
-    pub async fn user_id(&self, redis_conn: &mut MultiplexedConnection) -> redis::RedisResult<u32> {
+    pub async fn user_id(
+        &self,
+        redis_conn: &mut MultiplexedConnection,
+    ) -> redis::RedisResult<Option<u64>> {
         let (redis_hash_name, raw_token): (&str, &str) = match *self {
             Self::Full(ref token) => ("session", token),
             Self::Partial(ref token) => ("partial-session", token),
         };
         redis_conn.hget(redis_hash_name, raw_token).await
     }
+}
+
+/// List 2fa methods available for a user 
+pub async fn list_mfa_methods(
+    user_id: u64,
+    db_conn: &PgPool,
+) -> Result<Vec<MfaAuthenticationMethod>, sqlx::Error> {
+    let mut methods = vec![];
+    let totp_enabled = totp::Totp::select(user_id, db_conn).await?.is_some();
+    if totp_enabled {
+        methods.push(MfaAuthenticationMethod::Totp {
+            code: "string".to_owned(),
+        });
+    }
+    Ok(methods)
 }
