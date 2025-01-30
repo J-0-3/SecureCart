@@ -6,6 +6,14 @@
         "./env.dev.compose.yml"
     ],
     "service": "devcontainer",
-    "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"]
+    "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"], 
     // "forwardPorts": ["redisinsight:5540", "portainer:9000", "pgadmin:80"]
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
 }
