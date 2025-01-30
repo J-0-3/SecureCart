@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let mfa_router = Router::new()
         .route("/", get(get_mfa_methods))
+        .route("/", post(authenticate_2fa))
         .layer(from_fn_with_state(
             state.clone(),
             partially_authenticated_middleware,
@@ -115,20 +116,54 @@ async fn whoami(Extension(UserId(user_id)): Extension<UserId>) -> Json<WhoamiRes
 /// A response to /auth/2fa
 struct MfaMethodsResponse {
     /// The 2fa methods available to the user.
-    methods: Vec<auth::MfaAuthenticationMethod>
+    methods: Vec<auth::MfaAuthenticationMethod>,
 }
 
 /// Get MFA methods available to a user.
 async fn get_mfa_methods(
-    State(state): State<AppState>, Extension(PartialUserId(user_id)): Extension<PartialUserId>,
+    State(state): State<AppState>,
+    Extension(PartialUserId(user_id)): Extension<PartialUserId>,
 ) -> Result<Json<MfaMethodsResponse>, StatusCode> {
     let db_conn = state.db_conn;
-    let methods = auth::list_mfa_methods(user_id, &db_conn).await.map_err(|err| {
-        eprintln!("SQLx error while getting MFA methods: {err}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    
-    Ok(Json(MfaMethodsResponse {
-        methods
-    }))
+    let methods = auth::list_mfa_methods(user_id, &db_conn)
+        .await
+        .map_err(|err| {
+            eprintln!("SQLx error while getting MFA methods: {err}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(MfaMethodsResponse { methods }))
+}
+
+#[derive(Deserialize)]
+/// A request POST to /auth/2fa.
+struct MfaAuthenticateRequest {
+    /// The selected 2fa authentication method.
+    credential: auth::MfaAuthenticationMethod,
+}
+
+/// Authenticate using an MFA method.
+async fn authenticate_2fa(
+    cookies: CookieJar,
+    State(state): State<AppState>,
+    Extension(PartialUserId(user_id)): Extension<PartialUserId>,
+    Json(body): Json<MfaAuthenticateRequest>,
+) -> Result<CookieJar, StatusCode> {
+    let mut redis_conn = state.redis_conn.clone();
+    let auth::SessionToken::Full(token) =
+        auth::authenticate_2fa(user_id, body.credential, &state.db_conn, &mut redis_conn)
+            .await
+            .map_err(|err| {
+                eprintln!("SQLx error while authenticating: {err}.");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or_else(|| {
+                eprintln!("Failed MFA authentication for user {user_id}.");
+                StatusCode::UNAUTHORIZED
+            })?
+    else {
+        eprintln!("Partial token returned after 2fa authentication. Something is badly wrong.");
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    Ok(cookies.add(Cookie::build(("SESSION", token)).http_only(true)))
 }
