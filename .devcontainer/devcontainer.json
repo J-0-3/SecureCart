@@ -1,9 +1,11 @@
 {
     "name": "Securecart Development Environment",
     "dockerComposeFile": [
-        "../compose.yml",
-        "../devtools.compose.yml",
-        "./devenv.compose.yml"
+        "../dev.compose.yml",
+        "../tools.dev.compose.yml",
+        "./env.dev.compose.yml"
     ],
-    "service": "dev-env"
+    "service": "devcontainer",
+    "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"]
+    // "forwardPorts": ["redisinsight:5540", "portainer:9000", "pgadmin:80"]
 }

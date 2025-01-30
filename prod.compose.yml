@@ -1,0 +1,38 @@
+# Production/release service configuration. Loads configuration from env and safely handles secrets/credentials.
+services:
+  db:
+    build: backend/db
+    environment:
+      - POSTGRES_USER=$DB_USERNAME
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_DB=$DB_DATABASE
+    secrets:
+      - db_password
+
+  redis:
+    image: redis:latest
+
+  api:
+    build: 
+      context: backend/api
+    ports:
+      - 8080:8080
+    environment:
+      - DB_USERNAME=$DB_USERNAME
+      - DB_DATABASE=$DB_DATABASE
+      - DB_HOST=$DB_HOST
+      - REDIS_HOST=$REDIS_HOST
+      - DB_PASSWORD_DOCKER_SECRET=db_password
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
+      redis:
+        condition: service_started
+        restart: true
+    secrets:
+      db_password
+
+secrets:
+  db_password:
+    environment: DB_PASSWORD

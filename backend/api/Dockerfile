@@ -11,7 +11,7 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-ENV SQLX_OFFLINE=true
+ENV SQLX_OFFLINE=false
 RUN cargo build --release --target=x86_64-unknown-linux-musl
 
 FROM scratch
@@ -21,11 +21,5 @@ ARG DB_USERNAME
 ARG DB_DATABASE
 
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/securecart-api /app/service
-
-ENV DB_USERNAME=$DB_USERNAME
-ENV DB_DATABASE=$DB_DATABASE
-ENV DB_HOST=$DB_HOST
-ENV REDIS_HOST=$REDIS_HOST
-ENV DB_PASSWORD_DOCKER_SECRET=db_password
 
 CMD ["./app/service"]

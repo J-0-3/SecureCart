@@ -1,0 +1,30 @@
+# Development service configuration. All configuration and secret values are hardcoded. Insecure, never expose publically.
+services:
+  db:
+    build: backend/db
+    environment:
+      - POSTGRES_USER=securecart
+      - POSTGRES_PASSWORD=securecart
+      - POSTGRES_DB=securecart
+
+  redis:
+    image: redis:latest
+
+  api:
+    build: 
+      context: backend/api
+    ports:
+      - '127.0.0.1:8080:8080'
+    environment:
+      - DB_USERNAME=securecart
+      - DB_DATABASE=securecart
+      - DB_HOST=securecart
+      - REDIS_HOST=securecart
+      - DB_PASSWORD=securecart
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
+      redis:
+        condition: service_started
+        restart: true
