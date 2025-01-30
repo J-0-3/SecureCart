@@ -1,8 +1,16 @@
 //! Routes under /auth handling authentication related mechanisms.
-use crate::{controllers::auth, state::AppState};
+use crate::{
+    controllers::auth,
+    middleware::auth::{
+        authenticated_middleware, partially_authenticated_middleware, PartialUserId, UserId,
+    },
+    state::AppState,
+};
 use axum::{
-    extract::{Json, State},
+    extract::{Extension, Json, State},
+    handler::Handler as _,
     http::StatusCode,
+    middleware::from_fn_with_state,
     routing::{get, post},
     Router,
 };
@@ -10,11 +18,22 @@ use axum_extra::extract::{cookie::Cookie, CookieJar};
 use serde::{Deserialize, Serialize};
 
 /// Create a router for the /auth route.
-pub fn create_router() -> Router<AppState> {
+pub fn create_router(state: &AppState) -> Router<AppState> {
+    let mfa_router = Router::new()
+        .route("/", get(get_mfa_methods))
+        .layer(from_fn_with_state(
+            state.clone(),
+            partially_authenticated_middleware,
+        ));
     Router::new()
         .route("/", get(root))
         .route("/methods", get(list_methods))
-        .route("/login", post(authenticate))
+        .route("/login", post(login))
+        .route(
+            "/whoami",
+            get(whoami.layer(from_fn_with_state(state.clone(), authenticated_middleware))),
+        )
+        .nest("/2fa", mfa_router)
 }
 
 /// Simply returns a happy message :)
@@ -51,7 +70,7 @@ struct AuthenticateResponse {
     pub mfa_required: bool,
 }
 
-async fn authenticate(
+async fn login(
     cookies: CookieJar,
     State(state): State<AppState>,
     Json(body): Json<AuthenticateRequest>,
@@ -79,4 +98,37 @@ async fn authenticate(
         cookies.add(Cookie::build(("SESSION", session_cookie)).http_only(true)),
         Json(AuthenticateResponse { mfa_required }),
     ))
+}
+
+#[derive(Serialize)]
+/// A response to /auth/whoami
+struct WhoamiResponse {
+    /// The requesting user's ID.
+    pub user_id: u64,
+}
+/// Get the currently authenticated user.
+async fn whoami(Extension(UserId(user_id)): Extension<UserId>) -> Json<WhoamiResponse> {
+    Json(WhoamiResponse { user_id })
+}
+
+#[derive(Serialize)]
+/// A response to /auth/2fa
+struct MfaMethodsResponse {
+    /// The 2fa methods available to the user.
+    methods: Vec<auth::MfaAuthenticationMethod>
+}
+
+/// Get MFA methods available to a user.
+async fn get_mfa_methods(
+    State(state): State<AppState>, Extension(PartialUserId(user_id)): Extension<PartialUserId>,
+) -> Result<Json<MfaMethodsResponse>, StatusCode> {
+    let db_conn = state.db_conn;
+    let methods = auth::list_mfa_methods(user_id, &db_conn).await.map_err(|err| {
+        eprintln!("SQLx error while getting MFA methods: {err}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    
+    Ok(Json(MfaMethodsResponse {
+        methods
+    }))
 }
