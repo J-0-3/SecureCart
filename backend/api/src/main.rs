@@ -6,6 +6,7 @@ mod db;
 mod routes;
 mod state;
 mod utils;
+mod middleware;
 
 use axum::{extract::Json, routing::get};
 use tokio::net::TcpListener;
@@ -26,7 +27,7 @@ async fn main() {
     };
     let app = axum::Router::new()
         .route("/", get(root))
-        .nest("/auth", routes::auth::create_router())
+        .nest("/auth", routes::auth::create_router(&state))
         .with_state(state);
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
