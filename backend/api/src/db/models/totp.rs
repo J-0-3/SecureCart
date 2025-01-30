@@ -51,4 +51,12 @@ impl Totp {
             .await
             .map(|_| ())
     }
+
+    /// Validate that a TOTP code is correct.
+    pub fn validate(&self, code: &str) -> bool {
+        let totp = totp_rs::TOTP::new(totp_rs::Algorithm::SHA1, 6, 1, 30, self.secret.clone())
+            .expect("Failed to initialise Totp context");
+        totp.check_current(code)
+            .expect("Error while validating Totp code")
+    }
 }
