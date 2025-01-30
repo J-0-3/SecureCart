@@ -9,7 +9,7 @@ use crate::{
 };
 use rand::{rngs::StdRng, Rng as _, SeedableRng as _};
 use redis::{aio::MultiplexedConnection, AsyncCommands as _};
-use serde::{Deserialize, Serialize};
+use serde::{de::value::CowStrDeserializer, Deserialize, Serialize};
 use sqlx::PgPool;
 
 #[derive(Serialize, Deserialize)]
@@ -155,7 +155,7 @@ impl SessionToken {
     }
 }
 
-/// List 2fa methods available for a user 
+/// List 2fa methods available for a user
 pub async fn list_mfa_methods(
     user_id: u64,
     db_conn: &PgPool,
@@ -168,4 +168,31 @@ pub async fn list_mfa_methods(
         });
     }
     Ok(methods)
+}
+
+/// Validate a 2fa credential for a user.
+async fn validate_2fa(user_id: u64, method: MfaAuthenticationMethod, db_conn: &PgPool) -> bool {
+    match method {
+        MfaAuthenticationMethod::Totp { code } => {
+            let totp_secret = totp::Totp::select(user_id, db_conn)
+                .await
+                .expect("User does not have a TOTP code");
+            totp_secret.is_some_and(|secret| secret.validate(&code))
+        }
+    }
+}
+
+pub async fn authenticate_2fa(
+    user_id: u64,
+    method: MfaAuthenticationMethod,
+    db_conn: &PgPool,
+    redis_conn: &mut MultiplexedConnection,
+) -> redis::RedisResult<Option<SessionToken>> {
+    if validate_2fa(user_id, method, db_conn).await {
+        Ok(Some(
+            SessionToken::create(user_id, SessionTokenType::Full, redis_conn).await?,
+        ))
+    } else {
+        Ok(None)
+    }
 }

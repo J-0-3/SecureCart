@@ -20,6 +20,7 @@ serde = "1.0.217"
 sqlx = { version = "0.8.3", features = ["chrono", "postgres", "runtime-tokio", "time"] }
 time = { version = "0.3.37", features = ["macros"] }
 tokio = { version = "1.43.0", features = ["tracing", "rt-multi-thread"] } 
+totp-rs = "5.6.0"
 
 [lints.rust]
 unsafe_code = "forbid"
