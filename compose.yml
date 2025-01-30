@@ -21,10 +21,17 @@ services:
       - run
     ports:
       - 8080:8080
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
+      redis:
+        condition: service_started
+        restart: true
 
-  dev:
+  dev-env:
     build: 
-      context: dev
+      context: dev-env
       args:
         - DB_HOST=db
         - DB_USERNAME=securecart
@@ -35,36 +42,42 @@ services:
       - dev
     volumes:
       - .:/root/app
+      - ${XDG_RUNTIME_DIR}/docker.sock:/var/run/docker.sock
     hostname: securecart-dev
+    ports:
+      - '127.0.0.1:9999:9999' # for code-server
 
   pgadmin:
     image: dpage/pgadmin4
     ports: 
-      - 8000:80
+      - '127.0.0.1:8000:80'
     environment:
       - PGADMIN_DEFAULT_EMAIL=dev@securecart.com
       - PGADMIN_DEFAULT_PASSWORD=${DEV_DB_PASSWORD}
     profiles:
       - dev
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
 
   redisinsight:
     image: redis/redisinsight:latest
     ports:
-      - 5540:5540
+      - '127.0.0.1:5540:5540'
     profiles:
       - dev
-
-  pgweb:
-    image: sosedoff/pgweb
+    depends_on:
+      redis:
+        condition: service_started
+        restart: true
+        
+  portainer:
+    image: portainer/portainer-ce
+    volumes:
+      - /run/user/1000/docker.sock:/var/run/docker.sock
     ports:
-      - 8081:8081
-    profiles:
-      - dev
-    environment:
-      - PGWEB_AUTH_USER=securecart
-      - PGWEB_AUTH_PASS=${DEV_DB_PASSWORD}
-      - PGWEB_DATABASE_URL=postgres://securecart:${DEV_DB_PASSWORD}@db/securecart?sslmode=disable
-
+      - '127.0.0.1:9000:9000'
 
 secrets:
   db_password:
