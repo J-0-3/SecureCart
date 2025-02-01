@@ -1,14 +1,14 @@
 //! Routes under /auth handling authentication related mechanisms.
 use crate::{
-    controllers::auth,
-    middleware::auth::{
-        authenticated_middleware, partially_authenticated_middleware, PartialUserId, UserId,
+    middleware::auth::session_middleware,
+    services::{
+        auth,
+        sessions::{AuthenticatedFromSessionError, AuthenticatedSession, Session},
     },
     state::AppState,
 };
 use axum::{
     extract::{Extension, Json, State},
-    handler::Handler as _,
     http::StatusCode,
     middleware::from_fn_with_state,
     routing::{get, post},
@@ -21,20 +21,14 @@ use serde::{Deserialize, Serialize};
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let mfa_router = Router::new()
         .route("/", get(get_mfa_methods))
-        .route("/", post(authenticate_2fa))
-        .layer(from_fn_with_state(
-            state.clone(),
-            partially_authenticated_middleware,
-        ));
+        .route("/", post(authenticate_2fa));
     Router::new()
+        .route("/whoami", get(whoami))
+        .nest("/2fa", mfa_router)
+        .layer(from_fn_with_state(state.clone(), session_middleware))
         .route("/", get(root))
         .route("/methods", get(list_methods))
         .route("/login", post(login))
-        .route(
-            "/whoami",
-            get(whoami.layer(from_fn_with_state(state.clone(), authenticated_middleware))),
-        )
-        .nest("/2fa", mfa_router)
 }
 
 /// Simply returns a happy message :)
@@ -76,27 +70,43 @@ async fn login(
     State(state): State<AppState>,
     Json(body): Json<AuthenticateRequest>,
 ) -> Result<(CookieJar, Json<AuthenticateResponse>), StatusCode> {
+    let mut session_store = state.session_store_conn.clone();
     let session = auth::authenticate(
         &body.email,
         body.credential,
         &state.db_conn,
-        &mut state.redis_conn.clone(),
+        &mut session_store,
     )
     .await
     .map_err(|err| {
-        eprintln!("SQLx error while authenticating: {err}.");
+        eprintln!("SQLx error while authenticating: {err:?}.");
         StatusCode::INTERNAL_SERVER_ERROR
     })?
     .ok_or_else(|| {
         eprintln!("Failed authentication as {}.", body.email);
         StatusCode::UNAUTHORIZED
     })?;
-    let (mfa_required, session_cookie) = match session {
-        auth::SessionToken::Full(inner) => (false, inner),
-        auth::SessionToken::Partial(inner) => (true, inner),
-    };
+    let token = session.token().to_owned();
+    let mfa_required = match AuthenticatedSession::try_from_session(session, &mut session_store)
+        .await
+    {
+        Ok(_) => Ok(false),
+        Err(err) => {
+            match err {
+                AuthenticatedFromSessionError::InvalidSession => {
+                    eprintln!("Session expired immediately after creation. Server is likely misconfigured.");
+                    Err(StatusCode::INTERNAL_SERVER_ERROR) // not a 401, this is probably on us
+                }
+                AuthenticatedFromSessionError::StorageError(error) => {
+                    eprintln!("Storage error while checking session authentication: {error:?}");
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+                AuthenticatedFromSessionError::NotAuthenticated => Ok(true),
+            }
+        }
+    }?;
     Ok((
-        cookies.add(Cookie::build(("SESSION", session_cookie)).http_only(true)),
+        cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
         Json(AuthenticateResponse { mfa_required }),
     ))
 }
@@ -105,11 +115,13 @@ async fn login(
 /// A response to /auth/whoami
 struct WhoamiResponse {
     /// The requesting user's ID.
-    pub user_id: u64,
+    user_id: u64,
 }
 /// Get the currently authenticated user.
-async fn whoami(Extension(UserId(user_id)): Extension<UserId>) -> Json<WhoamiResponse> {
-    Json(WhoamiResponse { user_id })
+async fn whoami(Extension(session): Extension<Session>) -> Json<WhoamiResponse> {
+    Json(WhoamiResponse {
+        user_id: session.user_id(),
+    })
 }
 
 #[derive(Serialize)]
@@ -122,10 +134,10 @@ struct MfaMethodsResponse {
 /// Get MFA methods available to a user.
 async fn get_mfa_methods(
     State(state): State<AppState>,
-    Extension(PartialUserId(user_id)): Extension<PartialUserId>,
+    Extension(session): Extension<Session>,
 ) -> Result<Json<MfaMethodsResponse>, StatusCode> {
     let db_conn = state.db_conn;
-    let methods = auth::list_mfa_methods(user_id, &db_conn)
+    let methods = auth::list_mfa_methods(session.user_id(), &db_conn)
         .await
         .map_err(|err| {
             eprintln!("SQLx error while getting MFA methods: {err}");
@@ -146,24 +158,22 @@ struct MfaAuthenticateRequest {
 async fn authenticate_2fa(
     cookies: CookieJar,
     State(state): State<AppState>,
-    Extension(PartialUserId(user_id)): Extension<PartialUserId>,
+    Extension(session): Extension<Session>,
     Json(body): Json<MfaAuthenticateRequest>,
 ) -> Result<CookieJar, StatusCode> {
-    let mut redis_conn = state.redis_conn.clone();
-    let auth::SessionToken::Full(token) =
-        auth::authenticate_2fa(user_id, body.credential, &state.db_conn, &mut redis_conn)
+    let mut session_store = state.session_store_conn.clone();
+    let user_id = session.user_id();
+    let authenticated_session =
+        auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
             .await
             .map_err(|err| {
-                eprintln!("SQLx error while authenticating: {err}.");
+                eprintln!("SQLx error while authenticating: {err:?}.");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?
             .ok_or_else(|| {
                 eprintln!("Failed MFA authentication for user {user_id}.");
                 StatusCode::UNAUTHORIZED
-            })?
-    else {
-        eprintln!("Partial token returned after 2fa authentication. Something is badly wrong.");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    };
-    Ok(cookies.add(Cookie::build(("SESSION", token)).http_only(true)))
+            })?;
+    Ok(cookies
+        .add(Cookie::build(("SESSION", authenticated_session.token().to_owned())).http_only(true)))
 }

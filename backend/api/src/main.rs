@@ -1,12 +1,12 @@
 //! This crate implements the backend API for the `SecureCart` ecommerce platform.
 
 mod constants;
-mod controllers;
 mod db;
+mod middleware;
 mod routes;
+mod services;
 mod state;
 mod utils;
-mod middleware;
 
 use axum::{extract::Json, routing::get};
 use tokio::net::TcpListener;
@@ -15,15 +15,13 @@ use tokio::net::TcpListener;
 async fn main() {
     let db_conn = db::connect()
         .await
-        .expect("Could not connect to to Postgres");
-    let redis_conn = redis::Client::open(constants::redis::REDIS_URL.clone())
-        .expect("Could not connect to Redis")
-        .get_multiplexed_async_connection()
+        .expect("Could not connect to primary databasee");
+    let session_store_conn = services::sessions::store::Connection::connect()
         .await
-        .expect("Could not get async Redis connection");
+        .expect("Could not connect to session store");
     let state = state::AppState {
         db_conn,
-        redis_conn,
+        session_store_conn,
     };
     let app = axum::Router::new()
         .route("/", get(root))

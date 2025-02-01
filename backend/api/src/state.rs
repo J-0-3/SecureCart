@@ -1,12 +1,11 @@
 //! Defines the state shared across the Axum application.
-use redis::aio::MultiplexedConnection;
-use sqlx::PgPool;
+use crate::{db, services::sessions};
 
 #[derive(Clone)]
 /// The state struct shared across routers.
 pub struct AppState {
-    /// A Postgres connection pool for getting new Postgres connections.
-    pub db_conn: PgPool,
-    /// A redis multiplexed connection for getting new async redis connections.
-    pub redis_conn: MultiplexedConnection,
+    /// A database connection pool for getting new database connections.
+    pub db_conn: db::ConnectionPool,
+    /// A multiplexed connection for getting new session store connections.
+    pub session_store_conn: sessions::store::Connection,
 }

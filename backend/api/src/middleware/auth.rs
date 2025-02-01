@@ -1,5 +1,5 @@
 //! Middleware used for checking user authentication/authorisation.
-use crate::{controllers::auth::SessionToken, state::AppState};
+use crate::{services::sessions::Session, state::AppState};
 use axum::{
     extract::{Request, State},
     http::StatusCode,
@@ -17,7 +17,7 @@ pub struct UserId(pub u64);
 pub struct PartialUserId(pub u64);
 
 /// Middleware to parse a SESSION cookie and identify the associated user.
-pub async fn authenticated_middleware(
+pub async fn session_middleware(
     State(state): State<AppState>,
     cookie_jar: CookieJar,
     mut req: Request,
@@ -27,41 +27,17 @@ pub async fn authenticated_middleware(
         .get("SESSION")
         .ok_or(StatusCode::UNAUTHORIZED)?
         .value();
-    let token = SessionToken::Full(session_cookie.to_owned());
-    let mut redis_conn = state.redis_conn.clone();
-    let user_id = token
-        .user_id(&mut redis_conn)
+    let mut session_store = state.session_store_conn.clone();
+    let session = Session::get(session_cookie, &mut session_store)
         .await
         .map_err(|err| {
-            eprintln!("Error fetching user ID from Redis: {err}");
+            eprintln!("Error loading session from store: {err}");
             StatusCode::INTERNAL_SERVER_ERROR
         })?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    req.extensions_mut().insert(UserId(user_id));
-    Ok(next.run(req).await)
-}
-
-/// Middleware to parse a SESSION cookie and identify the partially authenticated associated user.
-pub async fn partially_authenticated_middleware(
-    State(state): State<AppState>,
-    cookie_jar: CookieJar,
-    mut req: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    let session_cookie = cookie_jar
-        .get("SESSION")
-        .ok_or(StatusCode::UNAUTHORIZED)?
-        .value();
-    let token = SessionToken::Partial(session_cookie.to_owned());
-    let mut redis_conn = state.redis_conn.clone();
-    let user_id = token
-        .user_id(&mut redis_conn)
-        .await
-        .map_err(|err| {
-            eprintln!("Error fetching user ID from Redis: {err}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
-    req.extensions_mut().insert(PartialUserId(user_id));
+        .ok_or_else(|| {
+            eprintln!("Invalid session token");
+            StatusCode::UNAUTHORIZED
+        })?;
+    req.extensions_mut().insert(session);
     Ok(next.run(req).await)
 }
