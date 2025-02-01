@@ -7,7 +7,7 @@ services:
       - PGADMIN_DEFAULT_PASSWORD=securecart
       - PGADMIN_CONFIG_WTF_CSRF_ENABLED=False # makes it work when tunneled
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8000:80"
     depends_on:
       db:
         condition: service_started
@@ -27,4 +27,4 @@ services:
     ports:
       - "127.0.0.1:9000:9000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /run/user/1000/docker.sock:/var/run/docker.sock
