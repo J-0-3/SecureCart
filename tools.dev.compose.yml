@@ -5,7 +5,6 @@ services:
     environment:
       - PGADMIN_DEFAULT_EMAIL=dev@securecart.com
       - PGADMIN_DEFAULT_PASSWORD=securecart
-      - PGADMIN_CONFIG_WTF_CSRF_ENABLED=False # makes it work when tunneled
     ports:
       - "127.0.0.1:8000:80"
     depends_on:
