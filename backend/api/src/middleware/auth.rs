@@ -8,14 +8,6 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 
-#[derive(Copy, Clone)]
-/// A fully authenticated user ID.
-pub struct UserId(pub u64);
-
-#[derive(Copy, Clone)]
-/// A partially authenticated user ID.
-pub struct PartialUserId(pub u64);
-
 /// Middleware to parse a SESSION cookie and identify the associated user.
 pub async fn session_middleware(
     State(state): State<AppState>,

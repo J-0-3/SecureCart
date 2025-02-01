@@ -63,8 +63,11 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
 }
 
 #[derive(Debug)]
+/// Errors related to the underlying storage layers (db, session store, etc).
 pub enum StorageError {
+    /// An error occurred while reading/writing the primary database.
     Database(db::StorageError),
+    /// An error occurred while reading/writing the session store.
     SessionStore(session_store::StorageError),
 }
 
