@@ -7,7 +7,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 RUN bash -c '. ~/.cargo/env && rustup default stable'
 RUN bash -c '. ~/.cargo/env && rustup component add rust-analyzer'
 RUN bash -c '. ~/.cargo/env && cargo install sqlx-cli'
-COPY /bashrc /root/.bashrc
+RUN echo '. ~/.cargo/env' >> ~/.bashrc
 
 WORKDIR /root
 CMD ["sleep", "infinity"]

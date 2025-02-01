@@ -6,7 +6,7 @@
         "./env.dev.compose.yml"
     ],
     "service": "devcontainer",
-    "workspaceFolder": "/workspace",
+    "workspaceFolder": "/workspace/app",
     "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"], 
     "customizations": {
         "vscode": {
