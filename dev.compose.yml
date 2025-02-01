@@ -6,9 +6,17 @@ services:
       - POSTGRES_USER=securecart
       - POSTGRES_PASSWORD=securecart
       - POSTGRES_DB=securecart
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "securecart", "-d", "securecart"]
+      interval: 1s
+      retries: 30
 
   redis:
     image: redis:latest
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      retries: 30
 
   api:
     build: 
@@ -18,13 +26,13 @@ services:
     environment:
       - DB_USERNAME=securecart
       - DB_DATABASE=securecart
-      - DB_HOST=securecart
-      - REDIS_HOST=securecart
+      - DB_HOST=db
+      - REDIS_HOST=redis
       - DB_PASSWORD=securecart
     depends_on:
       db:
-        condition: service_started
+        condition: service_healthy
         restart: true
       redis:
-        condition: service_started
+        condition: service_healthy
         restart: true
