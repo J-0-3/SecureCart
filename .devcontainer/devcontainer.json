@@ -1,0 +1,19 @@
+{
+    "name": "Securecart Development Environment",
+    "dockerComposeFile": [
+        "../dev.compose.yml",
+        "../tools.dev.compose.yml",
+        "./env.dev.compose.yml"
+    ],
+    "service": "devcontainer",
+    "workspaceFolder": "/workspace/app",
+    "runServices": ["db", "redis", "pgadmin", "portainer", "redisinsight"], 
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
+}

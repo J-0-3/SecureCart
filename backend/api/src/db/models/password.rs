@@ -76,10 +76,14 @@ impl Password {
         self.password = hash_password(password);
     }
     /// Select a password credential from the database by the corresponding user's ID.
-    pub async fn select(user_id: i64, db_client: &PgPool) -> Result<Option<Self>, sqlx::Error> {
-        query_as!(Self, "SELECT * FROM password WHERE user_id = $1", user_id)
-            .fetch_optional(db_client)
-            .await
+    pub async fn select(user_id: u64, db_client: &PgPool) -> Result<Option<Self>, sqlx::Error> {
+        query_as!(
+            Self,
+            "SELECT * FROM password WHERE user_id = $1",
+            i64::try_from(user_id).expect("User ID out of range for Postgres BIGINT")
+        )
+        .fetch_optional(db_client)
+        .await
     }
     /// Update the database record to match the model's internal state.
     pub async fn update(&self, db_client: &PgPool) -> Result<(), sqlx::Error> {

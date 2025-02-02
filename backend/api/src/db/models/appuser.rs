@@ -18,7 +18,7 @@ struct AppUserInsert {
 /// An `AppUser` which is stored in the database. Can only be constructed by
 /// reading it from the database.
 pub struct AppUser {
-    /// The `AppUser`'s ID primary key. Private to restrict construction.
+    /// The user's ID primary key.
     id: i64,
     /// The user's email address. Private to enforce validity.
     email: String,
@@ -61,8 +61,8 @@ impl AppUserInsert {
 
 impl AppUser {
     /// Get the `AppUser`'s ID primary key.
-    pub const fn id(&self) -> i64 {
-        self.id
+    pub fn id(&self) -> u64 {
+        u64::try_from(self.id).expect("Invalid user ID in database")
     }
     /// Get the user's email address.
     pub fn email(&self) -> EmailAddress {
@@ -78,6 +78,10 @@ impl AppUser {
         query_as!(Self, "SELECT * FROM appuser WHERE id = $1", &id)
             .fetch_optional(db_client)
             .await
+    }
+    /// Select an `AppUser` from the database by email.
+    pub async fn select_by_email(email: &str, db_client: &PgPool) -> Result<Option<Self>, Error> {
+        query_as!(Self, "SELECT * FROM appuser WHERE email = $1", email).fetch_optional(db_client).await
     }
     /// Retrieve all `AppUser` records in the database.
     pub async fn select_all(db_client: &PgPool) -> Result<Vec<Self>, Error> {

@@ -1,0 +1,29 @@
+# Additional services/tools which are useful during development.
+services:
+  pgadmin: # Postgres monitoring/administration
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=dev@securecart.com
+      - PGADMIN_DEFAULT_PASSWORD=securecart
+    ports:
+      - "127.0.0.1:8000:80"
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
+
+  redisinsight: # Nice Redis GUI
+    image: redis/redisinsight:latest
+    ports:
+      - "127.0.0.1:5540:5540"
+    depends_on:
+      redis:
+        condition: service_started
+        restart: true
+        
+  portainer: # Managing other development containers
+    image: portainer/portainer-ce
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - /run/user/1000/docker.sock:/var/run/docker.sock
