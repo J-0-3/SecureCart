@@ -1,14 +1,12 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
 use crate::constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT};
-use rand::{rngs::StdRng, Rng as _, SeedableRng as _};
 pub mod store;
 use store::{Connection, SessionCreationError, SessionInfo, StorageError};
 
 /// Generates a new 24-byte session token using a CSPRNG.
 fn generate_session_token() -> String {
-    let mut rng = StdRng::from_entropy();
     let mut token_buf: [u8; 24] = [0; 24];
-    rng.fill(&mut token_buf);
+    getrandom::fill(&mut token_buf).expect("Error getting OS random. Critical, aborting.");
     token_buf
         .into_iter()
         .fold(String::new(), |acc: String, x: u8| format!("{acc}{x:x}"))
