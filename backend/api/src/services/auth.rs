@@ -1,5 +1,5 @@
 //! Controllers which manage authentication.
-use core::convert;
+use core::{convert, fmt};
 
 use crate::{
     db::{
@@ -62,13 +62,25 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
     }]
 }
 
-#[derive(Debug)]
 /// Errors related to the underlying storage layers (db, session store, etc).
 pub enum StorageError {
     /// An error occurred while reading/writing the primary database.
     Database(db::StorageError),
     /// An error occurred while reading/writing the session store.
     SessionStore(session_store::StorageError),
+}
+
+impl fmt::Display for StorageError {
+    #[expect(
+        clippy::min_ident_chars,
+        reason = "f is the default trait fn param name"
+    )]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Database(ref err) => write!(f, "Error accessing database: {err}"),
+            Self::SessionStore(ref err) => write!(f, "Error accessing session store: {err}"),
+        }
+    }
 }
 
 impl From<db::StorageError> for StorageError {

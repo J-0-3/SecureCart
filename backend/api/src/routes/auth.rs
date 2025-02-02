@@ -79,11 +79,11 @@ async fn login(
     )
     .await
     .map_err(|err| {
-        eprintln!("SQLx error while authenticating: {err:?}.");
+        eprintln!("Error while authenticating: {err}");
         StatusCode::INTERNAL_SERVER_ERROR
     })?
     .ok_or_else(|| {
-        eprintln!("Failed authentication as {}.", body.email);
+        eprintln!("Failed authentication as {}", body.email);
         StatusCode::UNAUTHORIZED
     })?;
     let token = session.token().to_owned();
@@ -98,7 +98,7 @@ async fn login(
                     Err(StatusCode::INTERNAL_SERVER_ERROR) // not a 401, this is probably on us
                 }
                 AuthenticatedFromSessionError::StorageError(error) => {
-                    eprintln!("Storage error while checking session authentication: {error:?}");
+                    eprintln!("Storage error while checking session authentication: {error}");
                     Err(StatusCode::INTERNAL_SERVER_ERROR)
                 }
                 AuthenticatedFromSessionError::NotAuthenticated => Ok(true),
@@ -167,7 +167,7 @@ async fn authenticate_2fa(
         auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
             .await
             .map_err(|err| {
-                eprintln!("SQLx error while authenticating: {err:?}.");
+                eprintln!("SQLx error while authenticating: {err}.");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?
             .ok_or_else(|| {
