@@ -11,26 +11,9 @@ pub async fn connect() -> Result<ConnectionPool, errors::DatabaseError> {
 }
 
 pub mod errors {
-    use std::fmt;
+    use thiserror::Error;
 
-    #[derive(Debug)]
-    pub struct DatabaseError(sqlx::Error);
-
-    impl From<sqlx::Error> for DatabaseError {
-        fn from(err: sqlx::Error) -> Self {
-            Self(err)
-        }
-    }
-
-    impl std::error::Error for DatabaseError {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            Some(&self.0)
-        }
-    }
-
-    impl fmt::Display for DatabaseError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "Failed to access database ({})", self.0)
-        }
-    }
+    #[derive(Error, Debug)]
+    #[error(transparent)]
+    pub struct DatabaseError(#[from] sqlx::Error);
 }

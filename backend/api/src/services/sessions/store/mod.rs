@@ -86,67 +86,26 @@ impl Connection {
 
 pub mod errors {
     use redis::RedisError;
-    use std::fmt;
+    use thiserror::Error;
 
-    #[derive(Debug)]
-    pub struct SessionStorageError(RedisError);
+    #[derive(Error, Debug)]
+    #[error(transparent)]
+    pub struct SessionStorageError(#[from] RedisError);
 
-    impl From<RedisError> for SessionStorageError {
-        fn from(err: RedisError) -> Self {
-            Self(err)
-        }
-    }
-
-    impl fmt::Display for SessionStorageError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "Failed to access session store ({})", self.0)
-        }
-    }
-
-    impl std::error::Error for SessionStorageError {
-        fn cause(&self) -> Option<&dyn std::error::Error> {
-            Some(&self.0)
-        }
-    }
     /// Errors which can be thrown when creating a new session in the store.
-    #[derive(Debug)]
+    #[derive(Error, Debug)]
     pub enum SessionCreationError {
         /// There is already a session with the same token.
+        #[error("Attempted to store a session token which already exists.")]
         Duplicate,
         /// There was an error while writing to/reading from the store.
-        StorageError(SessionStorageError),
-    }
-
-    impl From<SessionStorageError> for SessionCreationError {
-        fn from(err: SessionStorageError) -> Self {
-            Self::StorageError(err)
-        }
+        #[error(transparent)]
+        StorageError(#[from] SessionStorageError),
     }
 
     impl From<RedisError> for SessionCreationError {
         fn from(err: RedisError) -> Self {
             Self::from(SessionStorageError::from(err))
-        }
-    }
-
-    impl fmt::Display for SessionCreationError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::Duplicate => write!(
-                    f,
-                    "Attempted to store a session token which already exists."
-                ),
-                Self::StorageError(err) => write!(f, "Storage error creating new session({err})"),
-            }
-        }
-    }
-
-    impl std::error::Error for SessionCreationError {
-        fn cause(&self) -> Option<&dyn std::error::Error> {
-            match self {
-                Self::Duplicate => None,
-                Self::StorageError(err) => Some(err),
-            }
         }
     }
 }

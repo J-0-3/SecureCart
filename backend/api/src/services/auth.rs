@@ -136,40 +136,13 @@ pub async fn authenticate_2fa(
 
 pub mod errors {
     use crate::{db::errors::DatabaseError, services::sessions::errors::SessionStorageError};
+    use thiserror::Error;
 
-    #[derive(Debug)]
+    #[derive(Error, Debug)]
     pub enum StorageError {
-        DatabaseError(DatabaseError),
-        SessionStorageError(SessionStorageError),
-    }
-
-    impl From<DatabaseError> for StorageError {
-        fn from(err: DatabaseError) -> Self {
-            Self::DatabaseError(err)
-        }
-    }
-
-    impl From<SessionStorageError> for StorageError {
-        fn from(err: SessionStorageError) -> Self {
-            Self::SessionStorageError(err)
-        }
-    }
-
-    impl std::fmt::Display for StorageError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::DatabaseError(err) => write!(f, "Error in database: {err}"),
-                Self::SessionStorageError(err) => write!(f, "Error in session storage: {err}"),
-            }
-        }
-    }
-
-    impl std::error::Error for StorageError {
-        fn cause(&self) -> Option<&dyn core::error::Error> {
-            match self {
-                Self::DatabaseError(err) => Some(err),
-                Self::SessionStorageError(err) => Some(err),
-            }
-        }
+        #[error(transparent)]
+        DatabaseError(#[from] DatabaseError),
+        #[error(transparent)]
+        SessionStorageError(#[from] SessionStorageError),
     }
 }

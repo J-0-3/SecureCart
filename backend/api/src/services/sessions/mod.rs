@@ -141,50 +141,24 @@ impl Session {
 
 pub mod errors {
     pub use super::store::errors::SessionStorageError;
+    use thiserror::Error;
 
     /// Errors returned when fallibly converting an unauthenticated ``Session`` object
     /// into an ``AuthenticatedSession`` object.
-    #[derive(Debug)]
+    #[derive(Error, Debug)]
     pub enum SessionPromotionError {
         /// The session was not previously authenticated (via a call to ``Session::authenticate``).
+        #[error("Attempted to promote an unauthenticated Session to AuthenticatedSession.")]
         NotAuthenticated,
         /// The session is invalid, and does not exist in the store.
+        #[error("Attempted to promote an invalid Session to AuthenticatedSession.")]
         InvalidSession,
         /// An error occurred while reading/writing the underlying session store.
-        StorageError(SessionStorageError),
-    }
-
-    impl From<SessionStorageError> for SessionPromotionError {
-        fn from(err: SessionStorageError) -> Self {
-            Self::StorageError(err)
-        }
-    }
-
-    impl std::fmt::Display for SessionPromotionError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::NotAuthenticated => write!(
-                    f,
-                    "Attempted to promote an unauthenticated Session to AuthenticatedSession."
-                ),
-                Self::InvalidSession => write!(
-                    f,
-                    "Attempted to promote an invalid Session to AuthenticatedSession"
-                ),
-                Self::StorageError(err) => {
-                    write!(f, "Storage error while promoting session({})", err)
-                }
-            }
-        }
-    }
-
-    impl std::error::Error for SessionPromotionError {
-        fn cause(&self) -> Option<&dyn std::error::Error> {
-            match self {
-                Self::NotAuthenticated => None,
-                Self::InvalidSession => None,
-                Self::StorageError(err) => Some(err),
-            }
-        }
+        #[error("Storage error while promoting session.")]
+        StorageError(
+            #[from]
+            #[source]
+            SessionStorageError,
+        ),
     }
 }
