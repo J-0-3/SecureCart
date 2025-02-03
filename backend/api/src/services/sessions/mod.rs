@@ -139,6 +139,7 @@ impl Session {
     }
 }
 
+/// Errors returned by function within this module.
 pub mod errors {
     pub use super::store::errors::SessionStorageError;
     use thiserror::Error;

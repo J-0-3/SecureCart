@@ -10,9 +10,11 @@ pub async fn connect() -> Result<ConnectionPool, errors::DatabaseError> {
     Ok(sqlx::PgPool::connect(&constants::DB_URL).await?)
 }
 
+/// Errors returned by functions in this module.
 pub mod errors {
     use thiserror::Error;
 
+    /// An error returned by underlying database layer.
     #[derive(Error, Debug)]
     #[error(transparent)]
     pub struct DatabaseError(#[from] sqlx::Error);

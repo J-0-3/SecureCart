@@ -84,10 +84,12 @@ impl Connection {
     }
 }
 
+/// Errors returned by functions in this module.
 pub mod errors {
     use redis::RedisError;
     use thiserror::Error;
 
+    /// An error returned by the underlying storage layer.
     #[derive(Error, Debug)]
     #[error(transparent)]
     pub struct SessionStorageError(#[from] RedisError);
