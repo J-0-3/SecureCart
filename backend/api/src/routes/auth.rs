@@ -3,7 +3,7 @@ use crate::{
     middleware::auth::session_middleware,
     services::{
         auth,
-        sessions::{AuthenticatedFromSessionError, AuthenticatedSession, Session},
+        sessions::{self, AuthenticatedSession, Session},
     },
     state::AppState,
 };
@@ -93,15 +93,15 @@ async fn login(
         Ok(_) => Ok(false),
         Err(err) => {
             match err {
-                AuthenticatedFromSessionError::InvalidSession => {
+                sessions::errors::SessionPromotionError::InvalidSession => {
                     eprintln!("Session expired immediately after creation. Server is likely misconfigured.");
                     Err(StatusCode::INTERNAL_SERVER_ERROR) // not a 401, this is probably on us
                 }
-                AuthenticatedFromSessionError::StorageError(error) => {
+                sessions::errors::SessionPromotionError::StorageError(error) => {
                     eprintln!("Storage error while checking session authentication: {error}");
                     Err(StatusCode::INTERNAL_SERVER_ERROR)
                 }
-                AuthenticatedFromSessionError::NotAuthenticated => Ok(true),
+                sessions::errors::SessionPromotionError::NotAuthenticated => Ok(true),
             }
         }
     }?;

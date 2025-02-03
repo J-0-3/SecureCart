@@ -1,12 +1,12 @@
 //! Controllers which manage authentication.
-use core::{convert, fmt};
+use core::convert;
 
 use crate::{
     db::{
         self,
         models::{appuser::AppUser, password::Password, totp::Totp},
     },
-    services::sessions::{store as session_store, AuthenticatedSession, Session},
+    services::sessions::{self, AuthenticatedSession, Session},
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ async fn do_password_authentication(
     user_id: u64,
     password: &str,
     db_conn: &db::ConnectionPool,
-) -> Result<bool, sqlx::Error> {
+) -> Result<bool, db::errors::DatabaseError> {
     Ok(Password::select(user_id, db_conn)
         .await?
         .is_some_and(|fetched| fetched.verify(password)))
@@ -36,7 +36,7 @@ impl PrimaryAuthenticationMethod {
         self,
         user_id: u64,
         db_conn: &db::ConnectionPool,
-    ) -> Result<bool, sqlx::Error> {
+    ) -> Result<bool, db::errors::DatabaseError> {
         match self {
             Self::Password { password } => {
                 do_password_authentication(user_id, &password, db_conn).await
@@ -62,37 +62,6 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
     }]
 }
 
-/// Errors related to the underlying storage layers (db, session store, etc).
-pub enum StorageError {
-    /// An error occurred while reading/writing the primary database.
-    Database(db::StorageError),
-    /// An error occurred while reading/writing the session store.
-    SessionStore(session_store::StorageError),
-}
-
-impl fmt::Display for StorageError {
-    #[expect(
-        clippy::min_ident_chars,
-        reason = "f is the default trait fn param name"
-    )]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::Database(ref err) => write!(f, "Error accessing database: {err}"),
-            Self::SessionStore(ref err) => write!(f, "Error accessing session store: {err}"),
-        }
-    }
-}
-
-impl From<db::StorageError> for StorageError {
-    fn from(err: db::StorageError) -> Self {
-        Self::Database(err)
-    }
-}
-impl From<session_store::StorageError> for StorageError {
-    fn from(err: session_store::StorageError) -> Self {
-        Self::SessionStore(err)
-    }
-}
 /// Authenticate with a primary authentication method, and return a session
 /// if successful. The session is not guaranteed to be fully authenticated,
 /// and checking that `AuthenticatedSession::try_from_session` is successful
@@ -102,8 +71,8 @@ pub async fn authenticate(
     email: &str,
     credential: PrimaryAuthenticationMethod,
     db_conn: &db::ConnectionPool,
-    session_store_conn: &mut session_store::Connection,
-) -> Result<Option<Session>, StorageError> {
+    session_store_conn: &mut sessions::store::Connection,
+) -> Result<Option<Session>, errors::StorageError> {
     let res = AppUser::select_by_email(email, db_conn).await?;
     let Some(user) = res else { return Ok(None) };
     if !credential.authenticate(user.id(), db_conn).await? {
@@ -126,7 +95,7 @@ pub async fn authenticate(
 pub async fn list_mfa_methods(
     user_id: u64,
     db_conn: &db::ConnectionPool,
-) -> Result<Vec<MfaAuthenticationMethod>, sqlx::Error> {
+) -> Result<Vec<MfaAuthenticationMethod>, errors::StorageError> {
     let mut methods = vec![];
     let totp_enabled = Totp::select(user_id, db_conn).await?.is_some();
     if totp_enabled {
@@ -142,7 +111,7 @@ async fn validate_2fa(
     user_id: u64,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
-) -> Result<bool, StorageError> {
+) -> Result<bool, errors::StorageError> {
     match method {
         MfaAuthenticationMethod::Totp { code } => {
             let totp_secret = Totp::select(user_id, db_conn).await?;
@@ -156,11 +125,51 @@ pub async fn authenticate_2fa(
     session: Session,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
-    session_store_conn: &mut session_store::Connection,
-) -> Result<Option<AuthenticatedSession>, StorageError> {
+    session_store_conn: &mut sessions::store::Connection,
+) -> Result<Option<AuthenticatedSession>, errors::StorageError> {
     if validate_2fa(session.user_id(), method, db_conn).await? {
         Ok(Some(session.authenticate(session_store_conn).await?))
     } else {
         Ok(None)
+    }
+}
+
+pub mod errors {
+    use crate::{db::errors::DatabaseError, services::sessions::errors::SessionStorageError};
+
+    #[derive(Debug)]
+    pub enum StorageError {
+        DatabaseError(DatabaseError),
+        SessionStorageError(SessionStorageError),
+    }
+
+    impl From<DatabaseError> for StorageError {
+        fn from(err: DatabaseError) -> Self {
+            Self::DatabaseError(err)
+        }
+    }
+
+    impl From<SessionStorageError> for StorageError {
+        fn from(err: SessionStorageError) -> Self {
+            Self::SessionStorageError(err)
+        }
+    }
+
+    impl std::fmt::Display for StorageError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::DatabaseError(err) => write!(f, "Error in database: {err}"),
+                Self::SessionStorageError(err) => write!(f, "Error in session storage: {err}"),
+            }
+        }
+    }
+
+    impl std::error::Error for StorageError {
+        fn cause(&self) -> Option<&dyn core::error::Error> {
+            match self {
+                Self::DatabaseError(err) => Some(err),
+                Self::SessionStorageError(err) => Some(err),
+            }
+        }
     }
 }

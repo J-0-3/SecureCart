@@ -1,12 +1,13 @@
 //! Models mapping to the password database table. Represents a password-based
 //! credential used by a user.
+use crate::db::{errors::DatabaseError, ConnectionPool};
 use argon2::{
     password_hash::{
         rand_core::OsRng, PasswordHash, PasswordHasher as _, PasswordVerifier as _, SaltString,
     },
     Algorithm, Argon2, Params, Version,
 };
-use sqlx::{query, query_as, PgPool};
+use sqlx::{query, query_as};
 
 /// INSERT model for a `Password`. Used ONLY when adding a new credential.
 pub struct PasswordInsert {
@@ -53,15 +54,15 @@ impl PasswordInsert {
         }
     }
     /// Store this INSERT model in the database and return a complete `Password` model.
-    pub async fn store(&self, db_client: &PgPool) -> Result<Password, sqlx::Error> {
-        query_as!(
+    pub async fn store(&self, db_client: &ConnectionPool) -> Result<Password, DatabaseError> {
+        Ok(query_as!(
             Password,
             "INSERT INTO password (user_id, password) VALUES ($1, $2) RETURNING *",
             self.user_id,
             self.password
         )
         .fetch_one(db_client)
-        .await
+        .await?)
     }
 }
 impl Password {
@@ -76,24 +77,27 @@ impl Password {
         self.password = hash_password(password);
     }
     /// Select a password credential from the database by the corresponding user's ID.
-    pub async fn select(user_id: u64, db_client: &PgPool) -> Result<Option<Self>, sqlx::Error> {
-        query_as!(
+    pub async fn select(
+        user_id: u64,
+        db_client: &ConnectionPool,
+    ) -> Result<Option<Self>, DatabaseError> {
+        Ok(query_as!(
             Self,
             "SELECT * FROM password WHERE user_id = $1",
             i64::try_from(user_id).expect("User ID out of range for Postgres BIGINT")
         )
         .fetch_optional(db_client)
-        .await
+        .await?)
     }
     /// Update the database record to match the model's internal state.
-    pub async fn update(&self, db_client: &PgPool) -> Result<(), sqlx::Error> {
-        query!(
+    pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
+        Ok(query!(
             "UPDATE password SET password = $1 WHERE user_id = $2",
             self.password,
             self.user_id
         )
         .execute(db_client)
         .await
-        .map(|_| ())
+        .map(|_| ())?)
     }
 }
