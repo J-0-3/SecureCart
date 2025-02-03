@@ -1,7 +1,7 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
 use crate::constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT};
 pub mod store;
-use store::{Connection, SessionCreationError, SessionInfo, StorageError};
+use store::{Connection, SessionInfo};
 
 /// Generates a new 24-byte session token using a CSPRNG.
 fn generate_session_token() -> String {
@@ -32,23 +32,6 @@ pub struct AuthenticatedSession {
     session: Session,
 }
 
-/// Errors returned when fallibly converting an unauthenticated ``Session`` object
-/// into an ``AuthenticatedSession`` object.
-pub enum AuthenticatedFromSessionError {
-    /// The session was not previously authenticated (via a call to ``Session::authenticate``).
-    NotAuthenticated,
-    /// The session is invalid, and does not exist in the store.
-    InvalidSession,
-    /// An error occurred while reading/writing the underlying session store.
-    StorageError(StorageError),
-}
-
-impl From<StorageError> for AuthenticatedFromSessionError {
-    fn from(err: StorageError) -> Self {
-        Self::StorageError(err)
-    }
-}
-
 impl AuthenticatedSession {
     /// Get a reference to this session's token.
     pub fn token(&self) -> &str {
@@ -67,15 +50,15 @@ impl AuthenticatedSession {
     pub async fn try_from_session(
         session: Session,
         session_store_conn: &mut Connection,
-    ) -> Result<Self, AuthenticatedFromSessionError> {
+    ) -> Result<Self, errors::SessionPromotionError> {
         let session_info = session_store_conn
             .info(&session.token)
             .await?
-            .ok_or(AuthenticatedFromSessionError::InvalidSession)?;
+            .ok_or(errors::SessionPromotionError::InvalidSession)?;
         if session_info.authenticated {
             Ok(Self { session })
         } else {
-            Err(AuthenticatedFromSessionError::NotAuthenticated)
+            Err(errors::SessionPromotionError::NotAuthenticated)
         }
     }
 }
@@ -92,7 +75,7 @@ impl Session {
     pub async fn create(
         user_id: u64,
         session_store_conn: &mut Connection,
-    ) -> Result<Self, StorageError> {
+    ) -> Result<Self, errors::SessionStorageError> {
         let token = loop {
             // Loop infinitely and return a token once we successful store the session.
             let candidate = generate_session_token();
@@ -108,8 +91,8 @@ impl Session {
             {
                 Ok(()) => break candidate, // return candidate from loop
                 Err(err) => match err {
-                    SessionCreationError::StorageError(error) => return Err(error),
-                    SessionCreationError::Duplicate => {} // keep looping
+                    store::errors::SessionCreationError::StorageError(error) => return Err(error),
+                    store::errors::SessionCreationError::Duplicate => {} // keep looping
                 },
             }
         };
@@ -123,7 +106,7 @@ impl Session {
     pub async fn get(
         token: &str,
         session_store_conn: &mut Connection,
-    ) -> Result<Option<Self>, StorageError> {
+    ) -> Result<Option<Self>, store::errors::SessionStorageError> {
         Ok(session_store_conn.info(token).await?.map(|info| Self {
             token: token.to_owned(),
             user_id: info.user_id,
@@ -145,7 +128,7 @@ impl Session {
     pub async fn authenticate(
         self,
         session_store_conn: &mut Connection,
-    ) -> Result<AuthenticatedSession, StorageError> {
+    ) -> Result<AuthenticatedSession, store::errors::SessionStorageError> {
         session_store_conn
             .set_authenticated(&self.token, true)
             .await?;
@@ -153,5 +136,30 @@ impl Session {
             .set_expiry(&self.token, SESSION_TIMEOUT)
             .await?;
         Ok(AuthenticatedSession { session: self })
+    }
+}
+
+/// Errors returned by function within this module.
+pub mod errors {
+    pub use super::store::errors::SessionStorageError;
+    use thiserror::Error;
+
+    /// Errors returned when fallibly converting an unauthenticated ``Session`` object
+    /// into an ``AuthenticatedSession`` object.
+    #[derive(Error, Debug)]
+    pub enum SessionPromotionError {
+        /// The session was not previously authenticated (via a call to ``Session::authenticate``).
+        #[error("Attempted to promote an unauthenticated Session to AuthenticatedSession.")]
+        NotAuthenticated,
+        /// The session is invalid, and does not exist in the store.
+        #[error("Attempted to promote an invalid Session to AuthenticatedSession.")]
+        InvalidSession,
+        /// An error occurred while reading/writing the underlying session store.
+        #[error("Storage error while promoting session.")]
+        StorageError(
+            #[from]
+            #[source]
+            SessionStorageError,
+        ),
     }
 }

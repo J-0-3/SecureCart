@@ -3,7 +3,7 @@ use crate::{
     middleware::auth::session_middleware,
     services::{
         auth,
-        sessions::{AuthenticatedFromSessionError, AuthenticatedSession, Session},
+        sessions::{self, AuthenticatedSession, Session},
     },
     state::AppState,
 };
@@ -77,34 +77,26 @@ async fn login(
         &state.db_conn,
         &mut session_store,
     )
-    .await
-    .map_err(|err| {
-        eprintln!("Error while authenticating: {err}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?
+    .await?
     .ok_or_else(|| {
         eprintln!("Failed authentication as {}", body.email);
         StatusCode::UNAUTHORIZED
     })?;
     let token = session.token().to_owned();
-    let mfa_required = match AuthenticatedSession::try_from_session(session, &mut session_store)
-        .await
-    {
-        Ok(_) => Ok(false),
-        Err(err) => {
-            match err {
-                AuthenticatedFromSessionError::InvalidSession => {
-                    eprintln!("Session expired immediately after creation. Server is likely misconfigured.");
-                    Err(StatusCode::INTERNAL_SERVER_ERROR) // not a 401, this is probably on us
+    let mfa_required =
+        match AuthenticatedSession::try_from_session(session, &mut session_store).await {
+            Ok(_) => Ok(false), // if successful, we do not need mfa
+            Err(err) => {
+                if matches!(
+                    err,
+                    sessions::errors::SessionPromotionError::NotAuthenticated
+                ) {
+                    Ok(true) // if not authenticated, we need mfa
+                } else {
+                    Err(err) // reraise any other errors
                 }
-                AuthenticatedFromSessionError::StorageError(error) => {
-                    eprintln!("Storage error while checking session authentication: {error}");
-                    Err(StatusCode::INTERNAL_SERVER_ERROR)
-                }
-                AuthenticatedFromSessionError::NotAuthenticated => Ok(true),
             }
-        }
-    }?;
+        }?;
     Ok((
         cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
         Json(AuthenticateResponse { mfa_required }),
@@ -137,13 +129,7 @@ async fn get_mfa_methods(
     Extension(session): Extension<Session>,
 ) -> Result<Json<MfaMethodsResponse>, StatusCode> {
     let db_conn = state.db_conn;
-    let methods = auth::list_mfa_methods(session.user_id(), &db_conn)
-        .await
-        .map_err(|err| {
-            eprintln!("SQLx error while getting MFA methods: {err}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
+    let methods = auth::list_mfa_methods(session.user_id(), &db_conn).await?;
     Ok(Json(MfaMethodsResponse { methods }))
 }
 
@@ -165,15 +151,39 @@ async fn authenticate_2fa(
     let user_id = session.user_id();
     let authenticated_session =
         auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
-            .await
-            .map_err(|err| {
-                eprintln!("SQLx error while authenticating: {err}.");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+            .await?
             .ok_or_else(|| {
                 eprintln!("Failed MFA authentication for user {user_id}.");
                 StatusCode::UNAUTHORIZED
             })?;
     Ok(cookies
         .add(Cookie::build(("SESSION", authenticated_session.token().to_owned())).http_only(true)))
+}
+
+impl From<auth::errors::StorageError> for StatusCode {
+    fn from(value: auth::errors::StorageError) -> Self {
+        eprintln!("Storage error in route handler: {value}");
+        Self::INTERNAL_SERVER_ERROR
+    }
+}
+
+impl From<sessions::errors::SessionPromotionError> for StatusCode {
+    fn from(value: sessions::errors::SessionPromotionError) -> Self {
+        match value {
+            sessions::errors::SessionPromotionError::InvalidSession => {
+                eprintln!(
+                    "Session expired immediately after creation. Server is likely misconfigured."
+                );
+                Self::INTERNAL_SERVER_ERROR // not a 401, this is probably on us
+            }
+            sessions::errors::SessionPromotionError::StorageError(error) => {
+                eprintln!("Storage error while checking session authentication: {error}");
+                Self::INTERNAL_SERVER_ERROR
+            }
+            sessions::errors::SessionPromotionError::NotAuthenticated => {
+                eprintln!("Session is not authenticated.");
+                Self::UNAUTHORIZED
+            }
+        }
+    }
 }

@@ -2,28 +2,12 @@
 //! within the session service, since no other part of the code should ever access
 //! the session store.
 use crate::constants::redis as constants;
-use redis::{aio::MultiplexedConnection, AsyncCommands as _, ExpireOption::NX, RedisError};
+use redis::{aio::MultiplexedConnection, AsyncCommands as _, ExpireOption::NX};
 
 #[derive(Clone)]
 /// A connection to the session store. Guaranteed to be safe to clone and share
 /// between threads.
 pub struct Connection(MultiplexedConnection);
-
-pub type StorageError = RedisError;
-
-/// Errors which can be thrown when creating a new session in the store.
-pub(super) enum SessionCreationError {
-    /// There is already a session with the same token.
-    Duplicate,
-    /// There was an error while writing to/reading from the store.
-    StorageError(StorageError),
-}
-
-impl From<StorageError> for SessionCreationError {
-    fn from(err: StorageError) -> Self {
-        Self::StorageError(err)
-    }
-}
 
 /// Information stored under a given session token.
 pub(super) struct SessionInfo {
@@ -35,7 +19,7 @@ pub(super) struct SessionInfo {
 impl Connection {
     /// Initiate a new (multiplexed) connection to the session store.
     /// This connection can be cloned and is safe share between threads.
-    pub async fn connect() -> Result<Self, StorageError> {
+    pub async fn connect() -> Result<Self, errors::SessionStorageError> {
         Ok(Self(
             redis::Client::open(constants::REDIS_URL.clone())?
                 .get_multiplexed_async_connection()
@@ -47,12 +31,12 @@ impl Connection {
         &mut self,
         token: &str,
         info: SessionInfo,
-    ) -> Result<(), SessionCreationError> {
+    ) -> Result<(), errors::SessionCreationError> {
         let key = format!("session:{token}");
         let _: () = self.0.hset_nx(&key, "user_id", info.user_id).await?;
         let set_user_id: u64 = self.0.hget(&key, "user_id").await?;
         if set_user_id != info.user_id {
-            return Err(SessionCreationError::Duplicate);
+            return Err(errors::SessionCreationError::Duplicate);
         }
         let _: () = self
             .0
@@ -65,33 +49,65 @@ impl Connection {
         &mut self,
         token: &str,
         authenticated: bool,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), errors::SessionStorageError> {
         let key = format!("session:{token}");
-        self.0.hset(&key, "authenticated", authenticated).await
+        Ok(self.0.hset(&key, "authenticated", authenticated).await?)
     }
     /// Delete a token and all associated data from the store.
-    pub(super) async fn delete(&mut self, token: &str) -> Result<(), StorageError> {
+    pub(super) async fn delete(&mut self, token: &str) -> Result<(), errors::SessionStorageError> {
         let key = format!("session:{token}");
-        self.0.hdel(key, &["user_id", "authenticated"]).await
+        Ok(self.0.hdel(key, &["user_id", "authenticated"]).await?)
     }
     /// Set a token's expiry in seconds.
     pub(super) async fn set_expiry(
         &mut self,
         token: &str,
         seconds: u32,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), errors::SessionStorageError> {
         let key = format!("session:{token}");
-        self.0
+        Ok(self
+            .0
             .hexpire(key, i64::from(seconds), NX, &["user_id", "authenticated"])
-            .await
+            .await?)
     }
     /// Get stored session info associated with a given token.
-    pub(super) async fn info(&mut self, token: &str) -> Result<Option<SessionInfo>, StorageError> {
+    pub(super) async fn info(
+        &mut self,
+        token: &str,
+    ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
         let key = format!("session:{token}");
         let result: Option<(u64, bool)> = self.0.hget(&key, &["user_id", "authenticated"]).await?;
         Ok(result.map(|(user_id, authenticated)| SessionInfo {
             user_id,
             authenticated,
         }))
+    }
+}
+
+/// Errors returned by functions in this module.
+pub mod errors {
+    use redis::RedisError;
+    use thiserror::Error;
+
+    /// An error returned by the underlying storage layer.
+    #[derive(Error, Debug)]
+    #[error(transparent)]
+    pub struct SessionStorageError(#[from] RedisError);
+
+    /// Errors which can be thrown when creating a new session in the store.
+    #[derive(Error, Debug)]
+    pub enum SessionCreationError {
+        /// There is already a session with the same token.
+        #[error("Attempted to store a session token which already exists.")]
+        Duplicate,
+        /// There was an error while writing to/reading from the store.
+        #[error(transparent)]
+        StorageError(#[from] SessionStorageError),
+    }
+
+    impl From<RedisError> for SessionCreationError {
+        fn from(err: RedisError) -> Self {
+            Self::from(SessionStorageError::from(err))
+        }
     }
 }

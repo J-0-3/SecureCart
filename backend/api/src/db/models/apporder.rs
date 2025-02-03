@@ -1,6 +1,7 @@
 //! Models mapping to the apporder database table. Represents a user's order
 //! from the store.
-use sqlx::{query_as, query, Error, PgPool};
+use crate::db::{ConnectionPool, errors::DatabaseError};
+use sqlx::{query_as, query};
 use time::PrimitiveDateTime;
 
 
@@ -30,12 +31,12 @@ pub struct AppOrder {
 
 impl AppOrderInsert {
     /// Store this INSERT model in the database and return a complete `AppOrder` model.
-    pub async fn store(self, db_client: &PgPool) -> Result<AppOrder, Error> {
-        query_as!(
+    pub async fn store(self, db_client: &ConnectionPool) -> Result<AppOrder, DatabaseError> {
+        Ok(query_as!(
             AppOrder, 
             "INSERT INTO apporder (user_id, order_placed, amount_charged) VALUES ($1, $2, $3) RETURNING *", 
             &self.user_id, &self.order_placed, &self.amount_charged
-        ).fetch_one(db_client).await
+        ).fetch_one(db_client).await?)
     }
 }
 
@@ -45,19 +46,19 @@ impl AppOrder {
         self.id
     }
     /// Select an `AppOrder` from the database by ID.
-    pub async fn select_one(id: i64, db_client: &PgPool) -> Result<Option<Self>, Error> {
-        query_as!(Self, "SELECT * FROM apporder WHERE id = $1", &id)
+    pub async fn select_one(id: i64, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
+        Ok(query_as!(Self, "SELECT * FROM apporder WHERE id = $1", &id)
             .fetch_optional(db_client)
-            .await
+            .await?)
     }
     /// Retrieve all `AppOrder` records in the database.
-    pub async fn select_all(db_client: &PgPool) -> Result<Vec<Self>, Error> {
-        query_as!(Self, "SELECT * FROM apporder")
+    pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
+        Ok(query_as!(Self, "SELECT * FROM apporder")
             .fetch_all(db_client)
-            .await
+            .await?)
     }
     /// Update the database record to match the model's current state.
-    pub async fn update(&self, db_client: &PgPool) -> Result<(), Error> {
+    pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
         query!(
             "UPDATE apporder SET user_id=$1, order_placed=$2, amount_charged=$3 WHERE id=$4", 
             self.user_id, self.order_placed, self.amount_charged, self.id
@@ -66,7 +67,7 @@ impl AppOrder {
     }
     /// Delete the corresponding record from the database. Also consumes the
     /// model itself for consistency.
-    pub async fn delete(self, db_client: &PgPool) -> Result<(), Error> {
+    pub async fn delete(self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
         query!("DELETE FROM apporder WHERE id = $1", self.id).execute(db_client).await?;
         Ok(())
     }
