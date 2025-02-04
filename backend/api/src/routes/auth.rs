@@ -3,6 +3,7 @@ use crate::{
     middleware::auth::session_middleware,
     services::{
         auth,
+        errors::StorageError,
         sessions::{self, AuthenticatedSession, PreAuthenticationSession, SessionTrait as _},
     },
     state::AppState,
@@ -156,8 +157,8 @@ async fn authenticate_2fa(
         .add(Cookie::build(("SESSION", authenticated_session.info().token())).http_only(true)))
 }
 
-impl From<auth::errors::StorageError> for StatusCode {
-    fn from(value: auth::errors::StorageError) -> Self {
+impl From<StorageError> for StatusCode {
+    fn from(value: StorageError) -> Self {
         eprintln!("Storage error in route handler: {value}");
         Self::INTERNAL_SERVER_ERROR
     }

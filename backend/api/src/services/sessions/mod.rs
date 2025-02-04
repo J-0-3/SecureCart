@@ -151,16 +151,11 @@ impl SessionTrait for RegistrationSession {
 
 impl RegistrationSession {
     pub async fn create(
-        user_id: u64,
         session_store_conn: &mut store::Connection,
     ) -> Result<Self, errors::SessionStorageError> {
         Ok(Self {
-            session: BaseSession::create(
-                user_id,
-                store::SessionType::Registration,
-                session_store_conn,
-            )
-            .await?,
+            session: BaseSession::create(0, store::SessionType::Registration, session_store_conn)
+                .await?,
         })
     }
 }

@@ -43,6 +43,9 @@ impl Connection {
         session_type: SessionType,
     ) -> Result<(), errors::SessionCreationError> {
         let key = format!("{}:{token}", session_type.to_parent_key_name());
+        if self.0.exists(&key).await? {
+            return Err(errors::SessionCreationError::Duplicate);
+        }
         let _: () = self.0.hset_nx(&key, "user_id", user_id).await?;
         let set_user_id: u64 = self.0.hget(&key, "user_id").await?;
         if set_user_id != user_id {

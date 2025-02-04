@@ -62,6 +62,11 @@ impl AppUserInsert {
             self.age
         ).fetch_one(db_client).await?)
     }
+
+    pub fn email(&self) -> EmailAddress {
+        EmailAddress::try_from(self.email.clone())
+            .expect("Solar bit flip has changed an email address")
+    }
 }
 
 impl AppUser {

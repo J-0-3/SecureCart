@@ -75,7 +75,7 @@ pub async fn authenticate(
     credential: PrimaryAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
-) -> Result<AuthenticationOutcome, errors::StorageError> {
+) -> Result<AuthenticationOutcome, super::errors::StorageError> {
     let res = AppUser::select_by_email(email, db_conn).await?;
     let Some(user) = res else {
         return Ok(AuthenticationOutcome::Failure);
@@ -98,7 +98,7 @@ pub async fn authenticate(
 pub async fn list_mfa_methods(
     user_id: u64,
     db_conn: &db::ConnectionPool,
-) -> Result<Vec<MfaAuthenticationMethod>, errors::StorageError> {
+) -> Result<Vec<MfaAuthenticationMethod>, super::errors::StorageError> {
     let mut methods = vec![];
     let totp_enabled = Totp::select(user_id, db_conn).await?.is_some();
     if totp_enabled {
@@ -114,7 +114,7 @@ async fn validate_2fa(
     user_id: u64,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
-) -> Result<bool, errors::StorageError> {
+) -> Result<bool, super::errors::StorageError> {
     match method {
         MfaAuthenticationMethod::Totp { code } => {
             let totp_secret = Totp::select(user_id, db_conn).await?;
@@ -129,7 +129,7 @@ pub async fn authenticate_2fa(
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
-) -> Result<Option<AuthenticatedSession>, errors::StorageError> {
+) -> Result<Option<AuthenticatedSession>, super::errors::StorageError> {
     if validate_2fa(session.info().user_id(), method, db_conn).await? {
         Ok(Some(session.promote(session_store_conn).await?))
     } else {
@@ -137,19 +137,5 @@ pub async fn authenticate_2fa(
     }
 }
 
-/// Errors returnd by functions within this module.
-pub mod errors {
-    use crate::{db::errors::DatabaseError, services::sessions::errors::SessionStorageError};
-    use thiserror::Error;
-
-    /// Errors returned by underlying storage layers.
-    #[derive(Error, Debug)]
-    pub enum StorageError {
-        /// An error returned by the database.
-        #[error(transparent)]
-        DatabaseError(#[from] DatabaseError),
-        /// An error returned by the session store.
-        #[error(transparent)]
-        SessionStorageError(#[from] SessionStorageError),
-    }
-}
+/// Errors returned by functions within this module.
+pub mod errors {}
