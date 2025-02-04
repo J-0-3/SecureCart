@@ -8,7 +8,7 @@ use serde::Deserialize;
 use sqlx::{query, query_as};
 
 /// INSERT model for an `AppUser`. Used ONLY when creating a new user.
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct AppUserInsert {
     /// The user's email address. Private to enforce validity.
     email: String,
@@ -67,12 +67,17 @@ impl AppUserInsert {
         EmailAddress::try_from(self.email.clone())
             .expect("Solar bit flip has changed an email address")
     }
+
+    pub fn age(&self) -> u8 {
+        u8::try_from(self.age).expect("Somehow a non-u8 value got into an AppUserInsert.")
+    }
 }
 
 impl AppUser {
     /// Get the `AppUser`'s ID primary key.
-    pub fn id(&self) -> u64 {
-        u64::try_from(self.id).expect("Invalid user ID in database")
+    pub fn id(&self) -> u32 {
+        u32::try_from(self.id)
+            .expect("User ID in database out of range for u32. Time to switch to u64/numeric.")
     }
     /// Get the user's email address.
     pub fn email(&self) -> EmailAddress {

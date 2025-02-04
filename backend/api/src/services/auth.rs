@@ -4,7 +4,7 @@ use crate::{
         self,
         models::{appuser::AppUser, password::Password, totp::Totp},
     },
-    services::sessions::{self, AuthenticatedSession, PreAuthenticationSession, SessionTrait as _},
+    services::sessions::{self, AuthenticatedSession, PreAuthenticationSession},
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,7 @@ pub enum PrimaryAuthenticationMethod {
 }
 
 async fn do_password_authentication(
-    user_id: u64,
+    user_id: u32,
     password: &str,
     db_conn: &db::ConnectionPool,
 ) -> Result<bool, db::errors::DatabaseError> {
@@ -32,7 +32,7 @@ impl PrimaryAuthenticationMethod {
     /// Authenticate using this authentication method.
     async fn authenticate(
         self,
-        user_id: u64,
+        user_id: u32,
         db_conn: &db::ConnectionPool,
     ) -> Result<bool, db::errors::DatabaseError> {
         match self {
@@ -96,7 +96,7 @@ pub async fn authenticate(
 
 /// List 2fa methods available for a user
 pub async fn list_mfa_methods(
-    user_id: u64,
+    user_id: u32,
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<MfaAuthenticationMethod>, super::errors::StorageError> {
     let mut methods = vec![];
@@ -111,7 +111,7 @@ pub async fn list_mfa_methods(
 
 /// Validate a 2fa credential for a user.
 async fn validate_2fa(
-    user_id: u64,
+    user_id: u32,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
 ) -> Result<bool, super::errors::StorageError> {
@@ -130,7 +130,7 @@ pub async fn authenticate_2fa(
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
 ) -> Result<Option<AuthenticatedSession>, super::errors::StorageError> {
-    if validate_2fa(session.info().user_id(), method, db_conn).await? {
+    if validate_2fa(session.user_id(), method, db_conn).await? {
         Ok(Some(session.promote(session_store_conn).await?))
     } else {
         Ok(None)

@@ -20,13 +20,12 @@ use serde::Deserialize;
 pub fn create_router(state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/credential", post(signup_add_credential))
-        .route("/complete", post(signup_finalise))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<RegistrationSession>,
         ))
         .route("/", get(root))
-        .route("/", post(signup_init))
+        .route("/signup", post(signup_init))
 }
 
 async fn root() -> Json<String> {
@@ -47,7 +46,7 @@ async fn signup_init(
     let db_conn = &state.db_conn;
     let session =
         registration::signup_init(body.user_data, &mut session_store_conn, db_conn).await?;
-    Ok(cookies.add(Cookie::build(("SESSION", session.info().token())).http_only(true)))
+    Ok(cookies.add(Cookie::build(("SESSION", session.token())).http_only(true)))
 }
 
 #[derive(Deserialize)]
@@ -60,16 +59,19 @@ async fn signup_add_credential(
     Extension(session): Extension<RegistrationSession>,
     Json(body): Json<SignUpAddCredentialRequest>,
 ) -> Result<(), StatusCode> {
-    registration::signup_add_credential(session, body.credential)
-        .await
-        .unwrap();
+    registration::signup_add_credential_and_commit(session, body.credential, &state.db_conn)
+        .await?;
     Ok(())
 }
 
-async fn signup_finalise(
-    State(state): State<AppState>,
-    Extension(session): Extension<RegistrationSession>,
-) -> Result<(), StatusCode> {
-    registration::signup_finalise(session, &state.db_conn).await;
-    Ok(())
+impl From<registration::errors::SignupInitError> for StatusCode {
+    fn from(value: registration::errors::SignupInitError) -> Self {
+        match value {
+            registration::errors::SignupInitError::StorageError(err) => err.into(),
+            registration::errors::SignupInitError::DuplicateEmail => {
+                eprintln!("Attempt to sign up with duplicate email.");
+                Self::CONFLICT
+            }
+        }
+    }
 }

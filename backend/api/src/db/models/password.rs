@@ -47,9 +47,9 @@ fn hash_password(password: &str) -> String {
 
 impl PasswordInsert {
     /// Construct a new password INSERT model.
-    pub fn new(user_id: i64, password: &str) -> Self {
+    pub fn new(user_id: u32, password: &str) -> Self {
         Self {
-            user_id,
+            user_id: user_id as i64,
             password: hash_password(password),
         }
     }
@@ -78,13 +78,13 @@ impl Password {
     }
     /// Select a password credential from the database by the corresponding user's ID.
     pub async fn select(
-        user_id: u64,
+        user_id: u32,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
         Ok(query_as!(
             Self,
             "SELECT * FROM password WHERE user_id = $1",
-            i64::try_from(user_id).expect("User ID out of range for Postgres BIGINT")
+            user_id as i64
         )
         .fetch_optional(db_client)
         .await?)

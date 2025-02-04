@@ -91,8 +91,8 @@ async fn login(
             eprintln!("Failed authentication as {}", body.email);
             return Err(StatusCode::UNAUTHORIZED);
         }
-        auth::AuthenticationOutcome::Success(session) => (false, session.info().token()),
-        auth::AuthenticationOutcome::Partial(session) => (true, session.info().token()),
+        auth::AuthenticationOutcome::Success(session) => (false, session.token()),
+        auth::AuthenticationOutcome::Partial(session) => (true, session.token()),
     };
     Ok((
         cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
@@ -104,12 +104,12 @@ async fn login(
 /// A response to /auth/whoami
 struct WhoamiResponse {
     /// The requesting user's ID.
-    user_id: u64,
+    user_id: u32,
 }
 /// Get the currently authenticated user.
 async fn whoami(Extension(session): Extension<AuthenticatedSession>) -> Json<WhoamiResponse> {
     Json(WhoamiResponse {
-        user_id: session.info().user_id(),
+        user_id: session.user_id(),
     })
 }
 
@@ -126,7 +126,7 @@ async fn get_mfa_methods(
     Extension(session): Extension<PreAuthenticationSession>,
 ) -> Result<Json<MfaMethodsResponse>, StatusCode> {
     let db_conn = state.db_conn;
-    let methods = auth::list_mfa_methods(session.info().user_id(), &db_conn).await?;
+    let methods = auth::list_mfa_methods(session.user_id(), &db_conn).await?;
     Ok(Json(MfaMethodsResponse { methods }))
 }
 
@@ -145,7 +145,7 @@ async fn authenticate_2fa(
     Json(body): Json<MfaAuthenticateRequest>,
 ) -> Result<CookieJar, StatusCode> {
     let mut session_store = state.session_store_conn.clone();
-    let user_id = session.info().user_id();
+    let user_id = session.user_id();
     let authenticated_session =
         auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
             .await?
@@ -153,8 +153,7 @@ async fn authenticate_2fa(
                 eprintln!("Failed MFA authentication for user {user_id}.");
                 StatusCode::UNAUTHORIZED
             })?;
-    Ok(cookies
-        .add(Cookie::build(("SESSION", authenticated_session.info().token())).http_only(true)))
+    Ok(cookies.add(Cookie::build(("SESSION", authenticated_session.token())).http_only(true)))
 }
 
 impl From<StorageError> for StatusCode {

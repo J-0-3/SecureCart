@@ -1,8 +1,11 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
-use crate::constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT};
+use crate::{
+    constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT},
+    db::models::appuser::AppUserInsert,
+};
 pub mod store;
 use core::fmt::Write as _;
-use store::Connection;
+use store::{Connection, SessionInfo};
 
 /// Generates a new 24-byte session token using a CSPRNG.
 fn generate_session_token() -> String {
@@ -22,9 +25,7 @@ fn generate_session_token() -> String {
 pub struct BaseSession {
     /// The session token used to identify this session.
     token: String,
-    /// The user ID the session is associated with.
-    user_id: u64,
-    session_type: store::SessionType, // this might seem redundant due to the
+    session_info: store::SessionInfo, // this might seem redundant due to the
                                       // wrapper classes, but it makes working
                                       // with the underlying store much easier
 }
@@ -36,7 +37,7 @@ pub trait SessionTrait: Send + Sync + Clone {
     ) -> Result<Option<Self>, errors::SessionStorageError>
     where
         Self: Sized;
-    fn info(&self) -> BaseSession;
+    fn token(&self) -> String;
 }
 
 /// A session which is guaranteed to have been fully authenticated. Can be
@@ -71,20 +72,24 @@ impl SessionTrait for AuthenticatedSession {
                 .map(|session| Self { session }),
         )
     }
+    fn token(&self) -> String {
+        self.session.token.clone()
+    }
+}
 
-    fn info(&self) -> BaseSession {
-        self.session.clone()
+impl AuthenticatedSession {
+    pub fn user_id(&self) -> u32 {
+        self.session.info().as_auth().unwrap()
     }
 }
 
 impl PreAuthenticationSession {
     pub async fn create(
-        user_id: u64,
+        user_id: u32,
         session_store_conn: &mut store::Connection,
     ) -> Result<Self, errors::SessionStorageError> {
         let session = BaseSession::create(
-            user_id,
-            store::SessionType::PreAuthentication,
+            SessionInfo::PreAuthentication { user_id },
             session_store_conn,
         )
         .await?;
@@ -101,8 +106,9 @@ impl PreAuthenticationSession {
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
         let session = BaseSession::create(
-            self.session.user_id,
-            store::SessionType::Authenticated,
+            SessionInfo::Authenticated {
+                user_id: self.session.info().as_auth().unwrap(),
+            },
             session_store_conn,
         )
         .await?;
@@ -110,6 +116,9 @@ impl PreAuthenticationSession {
             .set_expiry(SESSION_TIMEOUT, session_store_conn)
             .await?;
         Ok(AuthenticatedSession { session })
+    }
+    pub fn user_id(&self) -> u32 {
+        self.session.info().as_auth().unwrap()
     }
 }
 
@@ -127,8 +136,8 @@ impl SessionTrait for PreAuthenticationSession {
         .map(|session| Self { session }))
     }
 
-    fn info(&self) -> BaseSession {
-        self.session.clone()
+    fn token(&self) -> String {
+        self.session.token.clone()
     }
 }
 
@@ -143,20 +152,26 @@ impl SessionTrait for RegistrationSession {
                 .map(|session| Self { session }),
         )
     }
-
-    fn info(&self) -> BaseSession {
-        self.session.clone()
+    fn token(&self) -> String {
+        self.session.token.clone()
     }
 }
 
 impl RegistrationSession {
     pub async fn create(
+        user_data: AppUserInsert,
         session_store_conn: &mut store::Connection,
     ) -> Result<Self, errors::SessionStorageError> {
         Ok(Self {
-            session: BaseSession::create(0, store::SessionType::Registration, session_store_conn)
-                .await?,
+            session: BaseSession::create(
+                store::SessionInfo::Registration { user_data },
+                session_store_conn,
+            )
+            .await?,
         })
+    }
+    pub fn user_data(&self) -> AppUserInsert {
+        self.session.info().as_registration().unwrap()
     }
 }
 
@@ -164,15 +179,14 @@ impl BaseSession {
     /// Create a new session for a given user. This session is not considered
     /// fully authenticated until ``Self::authenticate`` is called on it.
     async fn create(
-        user_id: u64,
-        session_type: store::SessionType,
+        session_info: SessionInfo,
         session_store_conn: &mut Connection,
     ) -> Result<Self, errors::SessionStorageError> {
         let token = loop {
             // Loop infinitely and return a token once we successful store the session.
             let candidate = generate_session_token();
             match session_store_conn
-                .create(&candidate, user_id, session_type)
+                .create(&candidate, session_info.clone())
                 .await
             {
                 Ok(()) => break candidate, // return candidate from loop
@@ -184,8 +198,7 @@ impl BaseSession {
         };
         Ok(Self {
             token,
-            user_id,
-            session_type,
+            session_info,
         })
     }
 
@@ -195,12 +208,11 @@ impl BaseSession {
         session_store_conn: &mut Connection,
     ) -> Result<Option<Self>, store::errors::SessionStorageError> {
         Ok(session_store_conn
-            .get_user_id(token, session_type)
+            .get_info(token, session_type)
             .await?
-            .map(|user_id| Self {
+            .map(|session_info| Self {
                 token: token.to_owned(),
-                user_id,
-                session_type,
+                session_info,
             }))
     }
 
@@ -210,16 +222,11 @@ impl BaseSession {
         session_store_conn: &mut Connection,
     ) -> Result<(), errors::SessionStorageError> {
         session_store_conn
-            .set_expiry(&self.token, seconds, self.session_type)
+            .set_expiry(&self.token, seconds, self.session_info.clone().into())
             .await
     }
-    /// Get this session's authenticated user ID.
-    pub const fn user_id(&self) -> u64 {
-        self.user_id
-    }
-    /// Get this session's token.
-    pub fn token(&self) -> String {
-        self.token.clone()
+    pub fn info(&self) -> SessionInfo {
+        self.session_info.clone()
     }
 }
 

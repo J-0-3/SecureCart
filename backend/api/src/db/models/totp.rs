@@ -36,7 +36,7 @@ impl TotpInsert {
 impl Totp {
     /// Select a Totp record from the database by the associated user ID.
     pub async fn select(
-        user_id: u64,
+        user_id: u32,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
         Ok(query_as!(
