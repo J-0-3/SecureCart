@@ -49,7 +49,7 @@ impl PasswordInsert {
     /// Construct a new password INSERT model.
     pub fn new(user_id: u32, password: &str) -> Self {
         Self {
-            user_id: user_id as i64,
+            user_id: i64::from(user_id),
             password: hash_password(password),
         }
     }
@@ -84,7 +84,7 @@ impl Password {
         Ok(query_as!(
             Self,
             "SELECT * FROM password WHERE user_id = $1",
-            user_id as i64
+            i64::from(user_id)
         )
         .fetch_optional(db_client)
         .await?)
