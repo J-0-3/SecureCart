@@ -1,4 +1,3 @@
-mod store;
 use super::sessions;
 use crate::{
     db::{
