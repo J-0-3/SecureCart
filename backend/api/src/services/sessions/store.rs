@@ -35,7 +35,7 @@ impl SessionType {
 
 impl SessionInfo {
     fn to_parent_key_name(&self) -> String {
-        match self {
+        match *self {
             Self::PreAuthentication { .. } => String::from("sessions:preauthentication"),
             Self::Authenticated { .. } => String::from("sessions:authenticated"),
             Self::Registration { .. } => String::from("sessions:registration"),
@@ -43,15 +43,15 @@ impl SessionInfo {
     }
 
     pub const fn as_auth(&self) -> Result<u32, ()> {
-        match self {
+        match *self {
             Self::Registration { .. } => Err(()),
-            Self::PreAuthentication { user_id } | Self::Authenticated { user_id } => Ok(*user_id),
+            Self::PreAuthentication { user_id } | Self::Authenticated { user_id } => Ok(user_id),
         }
     }
 
     pub fn as_registration(&self) -> Result<AppUserInsert, ()> {
-        match self {
-            Self::Registration { user_data } => Ok(user_data.clone()),
+        match *self {
+            Self::Registration { ref user_data } => Ok(user_data.clone()),
             Self::PreAuthentication { .. } | Self::Authenticated { .. } => Err(()),
         }
     }

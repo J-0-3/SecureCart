@@ -9,6 +9,10 @@ use axum::{
 use axum_extra::extract::CookieJar;
 
 /// Middleware to parse a SESSION cookie and identify the associated user.
+#[expect(
+    clippy::future_not_send,
+    reason = "This works fine in practice with axum, and all SessionTrait implementers should be safe to send."
+)]
 pub async fn session_middleware<T: SessionTrait + 'static>(
     State(state): State<AppState>,
     cookie_jar: CookieJar,
