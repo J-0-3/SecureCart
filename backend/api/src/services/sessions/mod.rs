@@ -79,7 +79,10 @@ impl SessionTrait for AuthenticatedSession {
 
 impl AuthenticatedSession {
     pub fn user_id(&self) -> u32 {
-        self.session.info().as_auth().unwrap()
+        self.session
+            .info()
+            .as_auth()
+            .expect("Attempted to convert a registration session to an authentication session.")
     }
 }
 
@@ -107,7 +110,9 @@ impl PreAuthenticationSession {
             .await?;
         let session = BaseSession::create(
             SessionInfo::Authenticated {
-                user_id: self.session.info().as_auth().unwrap(),
+                user_id: self.session.info().as_auth().expect(
+                    "Attempted to promote a registration session to an authenticated session.",
+                ),
             },
             session_store_conn,
         )
@@ -118,7 +123,10 @@ impl PreAuthenticationSession {
         Ok(AuthenticatedSession { session })
     }
     pub fn user_id(&self) -> u32 {
-        self.session.info().as_auth().unwrap()
+        self.session
+            .info()
+            .as_auth()
+            .expect("Attempted to convert a registration session to a preauth session.")
     }
 }
 
@@ -171,7 +179,10 @@ impl RegistrationSession {
         })
     }
     pub fn user_data(&self) -> AppUserInsert {
-        self.session.info().as_registration().unwrap()
+        self.session
+            .info()
+            .as_registration()
+            .expect("Attempted to convert an authentication session to a registration session.")
     }
 }
 

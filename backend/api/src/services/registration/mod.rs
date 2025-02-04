@@ -43,9 +43,9 @@ pub async fn signup_add_credential_and_commit(
     match credential {
         PrimaryAuthenticationMethod::Password { password } => {
             let password_model = PasswordInsert::new(stored_user.id(), &password);
-            if let Err(e) = password_model.store(db_conn).await {
+            if let Err(err) = password_model.store(db_conn).await {
                 stored_user.delete(db_conn).await?;
-                return Err(e.into());
+                return Err(err.into());
             }
         }
     }
