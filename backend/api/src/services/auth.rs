@@ -1,12 +1,10 @@
 //! Controllers which manage authentication.
-use core::convert;
-
 use crate::{
     db::{
         self,
         models::{appuser::AppUser, password::Password, totp::Totp},
     },
-    services::sessions::{self, AuthenticatedSession, Session},
+    services::sessions::{self, AuthenticatedSession, PreAuthenticationSession, SessionTrait as _},
 };
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +60,11 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
     }]
 }
 
+pub enum AuthenticationOutcome {
+    Success(AuthenticatedSession),
+    Partial(PreAuthenticationSession),
+    Failure,
+}
 /// Authenticate with a primary authentication method, and return a session
 /// if successful. The session is not guaranteed to be fully authenticated,
 /// and checking that `AuthenticatedSession::try_from_session` is successful
@@ -72,22 +75,22 @@ pub async fn authenticate(
     credential: PrimaryAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
-) -> Result<Option<Session>, errors::StorageError> {
+) -> Result<AuthenticationOutcome, errors::StorageError> {
     let res = AppUser::select_by_email(email, db_conn).await?;
-    let Some(user) = res else { return Ok(None) };
+    let Some(user) = res else {
+        return Ok(AuthenticationOutcome::Failure);
+    };
     if !credential.authenticate(user.id(), db_conn).await? {
-        return Ok(None);
+        return Ok(AuthenticationOutcome::Failure);
     }
     let user_id = user.id();
-    let session = Session::create(user_id, session_store_conn).await?;
+    let session = PreAuthenticationSession::create(user_id, session_store_conn).await?;
     if Totp::select(user_id, db_conn).await?.is_none() {
-        session
-            .authenticate(session_store_conn)
-            .await
-            .map(|sess| Some(sess.into()))
-            .map_err(convert::Into::into) // why is this not implicit?
+        Ok(AuthenticationOutcome::Success(
+            session.promote(session_store_conn).await?,
+        ))
     } else {
-        Ok(Some(session))
+        Ok(AuthenticationOutcome::Partial(session))
     }
 }
 
@@ -122,13 +125,13 @@ async fn validate_2fa(
 
 /// Authenticate a partially authenticated user using an MFA method.
 pub async fn authenticate_2fa(
-    session: Session,
+    session: PreAuthenticationSession,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
 ) -> Result<Option<AuthenticatedSession>, errors::StorageError> {
-    if validate_2fa(session.user_id(), method, db_conn).await? {
-        Ok(Some(session.authenticate(session_store_conn).await?))
+    if validate_2fa(session.info().user_id(), method, db_conn).await? {
+        Ok(Some(session.promote(session_store_conn).await?))
     } else {
         Ok(None)
     }

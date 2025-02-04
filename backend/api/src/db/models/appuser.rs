@@ -4,10 +4,12 @@ use crate::{
     db::{errors::DatabaseError, ConnectionPool},
     utils::email::EmailAddress,
 };
+use serde::Deserialize;
 use sqlx::{query, query_as};
 
 /// INSERT model for an `AppUser`. Used ONLY when creating a new user.
-struct AppUserInsert {
+#[derive(Deserialize)]
+pub struct AppUserInsert {
     /// The user's email address. Private to enforce validity.
     email: String,
     /// The user's forename.

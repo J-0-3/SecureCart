@@ -9,13 +9,23 @@ use redis::{aio::MultiplexedConnection, AsyncCommands as _, ExpireOption::NX};
 /// between threads.
 pub struct Connection(MultiplexedConnection);
 
-/// Information stored under a given session token.
-pub(super) struct SessionInfo {
-    /// The user ID associated with this session.
-    pub user_id: u64,
-    /// Whether the session token is sufficient to authenticate the user.
-    pub authenticated: bool,
+#[derive(Copy, Clone)]
+pub enum SessionType {
+    PreAuthentication,
+    Authenticated,
+    Registration,
 }
+
+impl SessionType {
+    fn to_parent_key_name(self) -> String {
+        match self {
+            Self::PreAuthentication => String::from("sessions:preauthentication"),
+            Self::Authenticated => String::from("sessions:authenticated"),
+            Self::Registration => String::from("sessions:registration"),
+        }
+    }
+}
+
 impl Connection {
     /// Initiate a new (multiplexed) connection to the session store.
     /// This connection can be cloned and is safe share between threads.
@@ -26,61 +36,53 @@ impl Connection {
                 .await?,
         ))
     }
-    /// Create a new token with some associated session info.
     pub(super) async fn create(
         &mut self,
         token: &str,
-        info: SessionInfo,
+        user_id: u64,
+        session_type: SessionType,
     ) -> Result<(), errors::SessionCreationError> {
-        let key = format!("session:{token}");
-        let _: () = self.0.hset_nx(&key, "user_id", info.user_id).await?;
+        let key = format!("{}:{token}", session_type.to_parent_key_name());
+        let _: () = self.0.hset_nx(&key, "user_id", user_id).await?;
         let set_user_id: u64 = self.0.hget(&key, "user_id").await?;
-        if set_user_id != info.user_id {
+        if set_user_id != user_id {
             return Err(errors::SessionCreationError::Duplicate);
         }
-        let _: () = self
-            .0
-            .hset_nx(&key, "authenticated", info.authenticated)
-            .await?;
         Ok(())
     }
-    /// Set a token's `authenticated` field to true.
-    pub(super) async fn set_authenticated(
+
+    /// Delete a token and all associated data from the store.
+    pub(super) async fn delete(
         &mut self,
         token: &str,
-        authenticated: bool,
+        session_type: SessionType,
     ) -> Result<(), errors::SessionStorageError> {
-        let key = format!("session:{token}");
-        Ok(self.0.hset(&key, "authenticated", authenticated).await?)
+        let key = format!("{}:{token}", session_type.to_parent_key_name());
+        Ok(self.0.hdel(key, "user_id").await?)
     }
-    /// Delete a token and all associated data from the store.
-    pub(super) async fn delete(&mut self, token: &str) -> Result<(), errors::SessionStorageError> {
-        let key = format!("session:{token}");
-        Ok(self.0.hdel(key, &["user_id", "authenticated"]).await?)
-    }
+
     /// Set a token's expiry in seconds.
     pub(super) async fn set_expiry(
         &mut self,
         token: &str,
         seconds: u32,
+        session_type: SessionType,
     ) -> Result<(), errors::SessionStorageError> {
-        let key = format!("session:{token}");
+        let key = format!("{}:{token}", session_type.to_parent_key_name());
         Ok(self
             .0
-            .hexpire(key, i64::from(seconds), NX, &["user_id", "authenticated"])
+            .hexpire(key, i64::from(seconds), NX, "user_id")
             .await?)
     }
     /// Get stored session info associated with a given token.
-    pub(super) async fn info(
+    pub(super) async fn get_user_id(
         &mut self,
         token: &str,
-    ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
-        let key = format!("session:{token}");
-        let result: Option<(u64, bool)> = self.0.hget(&key, &["user_id", "authenticated"]).await?;
-        Ok(result.map(|(user_id, authenticated)| SessionInfo {
-            user_id,
-            authenticated,
-        }))
+        session_type: SessionType,
+    ) -> Result<Option<u64>, errors::SessionStorageError> {
+        let key = format!("{}:{token}", session_type.to_parent_key_name());
+        let result: Option<u64> = self.0.hget(&key, "user_id").await?;
+        Ok(result)
     }
 }
 
