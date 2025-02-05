@@ -4,10 +4,12 @@ use crate::{
     db::{errors::DatabaseError, ConnectionPool},
     utils::email::EmailAddress,
 };
+use serde::Deserialize;
 use sqlx::{query, query_as};
 
 /// INSERT model for an `AppUser`. Used ONLY when creating a new user.
-struct AppUserInsert {
+#[derive(Deserialize, Clone)]
+pub struct AppUserInsert {
     /// The user's email address. Private to enforce validity.
     email: String,
     /// The user's forename.
@@ -60,12 +62,24 @@ impl AppUserInsert {
             self.age
         ).fetch_one(db_client).await?)
     }
+
+    /// Return the email address to store.
+    pub fn email(&self) -> EmailAddress {
+        EmailAddress::try_from(self.email.clone())
+            .expect("Solar bit flip has changed an email address")
+    }
+
+    /// Return the age value of this `AppUserInsert`.
+    pub fn age(&self) -> u8 {
+        u8::try_from(self.age).expect("Somehow a non-u8 value got into an AppUserInsert.")
+    }
 }
 
 impl AppUser {
     /// Get the `AppUser`'s ID primary key.
-    pub fn id(&self) -> u64 {
-        u64::try_from(self.id).expect("Invalid user ID in database")
+    pub fn id(&self) -> u32 {
+        u32::try_from(self.id)
+            .expect("User ID in database out of range for u32. Time to switch to u64/numeric.")
     }
     /// Get the user's email address.
     pub fn email(&self) -> EmailAddress {

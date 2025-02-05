@@ -3,7 +3,8 @@ use crate::{
     middleware::auth::session_middleware,
     services::{
         auth,
-        sessions::{self, AuthenticatedSession, Session},
+        errors::StorageError,
+        sessions::{self, AuthenticatedSession, PreAuthenticationSession, SessionTrait as _},
     },
     state::AppState,
 };
@@ -21,11 +22,18 @@ use serde::{Deserialize, Serialize};
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let mfa_router = Router::new()
         .route("/", get(get_mfa_methods))
-        .route("/", post(authenticate_2fa));
+        .route("/", post(authenticate_2fa))
+        .layer(from_fn_with_state(
+            state.clone(),
+            session_middleware::<PreAuthenticationSession>,
+        ));
     Router::new()
         .route("/whoami", get(whoami))
+        .layer(from_fn_with_state(
+            state.clone(),
+            session_middleware::<AuthenticatedSession>,
+        ))
         .nest("/2fa", mfa_router)
-        .layer(from_fn_with_state(state.clone(), session_middleware))
         .route("/", get(root))
         .route("/methods", get(list_methods))
         .route("/login", post(login))
@@ -71,32 +79,21 @@ async fn login(
     Json(body): Json<AuthenticateRequest>,
 ) -> Result<(CookieJar, Json<AuthenticateResponse>), StatusCode> {
     let mut session_store = state.session_store_conn.clone();
-    let session = auth::authenticate(
+    let outcome = auth::authenticate(
         &body.email,
         body.credential,
         &state.db_conn,
         &mut session_store,
     )
-    .await?
-    .ok_or_else(|| {
-        eprintln!("Failed authentication as {}", body.email);
-        StatusCode::UNAUTHORIZED
-    })?;
-    let token = session.token().to_owned();
-    let mfa_required =
-        match AuthenticatedSession::try_from_session(session, &mut session_store).await {
-            Ok(_) => Ok(false), // if successful, we do not need mfa
-            Err(err) => {
-                if matches!(
-                    err,
-                    sessions::errors::SessionPromotionError::NotAuthenticated
-                ) {
-                    Ok(true) // if not authenticated, we need mfa
-                } else {
-                    Err(err) // reraise any other errors
-                }
-            }
-        }?;
+    .await?;
+    let (mfa_required, token) = match outcome {
+        auth::AuthenticationOutcome::Failure => {
+            eprintln!("Failed authentication as {}", body.email);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        auth::AuthenticationOutcome::Success(session) => (false, session.token()),
+        auth::AuthenticationOutcome::Partial(session) => (true, session.token()),
+    };
     Ok((
         cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
         Json(AuthenticateResponse { mfa_required }),
@@ -107,10 +104,10 @@ async fn login(
 /// A response to /auth/whoami
 struct WhoamiResponse {
     /// The requesting user's ID.
-    user_id: u64,
+    user_id: u32,
 }
 /// Get the currently authenticated user.
-async fn whoami(Extension(session): Extension<Session>) -> Json<WhoamiResponse> {
+async fn whoami(Extension(session): Extension<AuthenticatedSession>) -> Json<WhoamiResponse> {
     Json(WhoamiResponse {
         user_id: session.user_id(),
     })
@@ -126,7 +123,7 @@ struct MfaMethodsResponse {
 /// Get MFA methods available to a user.
 async fn get_mfa_methods(
     State(state): State<AppState>,
-    Extension(session): Extension<Session>,
+    Extension(session): Extension<PreAuthenticationSession>,
 ) -> Result<Json<MfaMethodsResponse>, StatusCode> {
     let db_conn = state.db_conn;
     let methods = auth::list_mfa_methods(session.user_id(), &db_conn).await?;
@@ -144,7 +141,7 @@ struct MfaAuthenticateRequest {
 async fn authenticate_2fa(
     cookies: CookieJar,
     State(state): State<AppState>,
-    Extension(session): Extension<Session>,
+    Extension(session): Extension<PreAuthenticationSession>,
     Json(body): Json<MfaAuthenticateRequest>,
 ) -> Result<CookieJar, StatusCode> {
     let mut session_store = state.session_store_conn.clone();
@@ -156,12 +153,11 @@ async fn authenticate_2fa(
                 eprintln!("Failed MFA authentication for user {user_id}.");
                 StatusCode::UNAUTHORIZED
             })?;
-    Ok(cookies
-        .add(Cookie::build(("SESSION", authenticated_session.token().to_owned())).http_only(true)))
+    Ok(cookies.add(Cookie::build(("SESSION", authenticated_session.token())).http_only(true)))
 }
 
-impl From<auth::errors::StorageError> for StatusCode {
-    fn from(value: auth::errors::StorageError) -> Self {
+impl From<StorageError> for StatusCode {
+    fn from(value: StorageError) -> Self {
         eprintln!("Storage error in route handler: {value}");
         Self::INTERNAL_SERVER_ERROR
     }

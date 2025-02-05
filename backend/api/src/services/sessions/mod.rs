@@ -1,6 +1,10 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
-use crate::constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT};
+use crate::{
+    constants::sessions::{PREAUTH_SESSION_TIMEOUT, REGISTRATION_SESSION_TIMEOUT, SESSION_TIMEOUT},
+    db::models::appuser::AppUserInsert,
+};
 pub mod store;
+use core::fmt::Write as _;
 use store::{Connection, SessionInfo};
 
 /// Generates a new 24-byte session token using a CSPRNG.
@@ -9,17 +13,37 @@ fn generate_session_token() -> String {
     getrandom::fill(&mut token_buf).expect("Error getting OS random. Critical, aborting.");
     token_buf
         .into_iter()
-        .fold(String::new(), |acc: String, x: u8| format!("{acc}{x:x}"))
+        .fold(String::new(), |mut acc: String, x: u8| {
+            write!(acc, "{x:x}").unwrap();
+            acc
+        })
 }
 
 #[derive(Clone)]
 /// A session, associating a session token with a given user. *NOT* guaranteed
 /// to be fully authenticated. Look at `AuthenticatedSession` for that.
-pub struct Session {
+pub struct BaseSession {
     /// The session token used to identify this session.
     token: String,
-    /// The user ID the session is associated with.
-    user_id: u64,
+    /// The information stored in this session.
+    session_info: store::SessionInfo, // this might seem redundant due to the
+                                      // wrapper classes, but it makes working
+                                      // with the underlying store much easier
+}
+
+pub trait SessionTrait: Send + Sync + Clone + Sized {
+    /// Get an instance of this session type given the corresponding session token.
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError>;
+    /// Get the session token which identifies this session.
+    fn token(&self) -> String;
+    /// Delete this session, immediately invalidating it.
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError>;
 }
 
 /// A session which is guaranteed to have been fully authenticated. Can be
@@ -27,66 +51,202 @@ pub struct Session {
 /// was _not_ previously authenticated within the session store, or fallibly by calling
 /// `AuthenticatedSession::try_from_session` on a session which _was_ previously
 /// authenticated within the session store.
+#[derive(Clone)]
 pub struct AuthenticatedSession {
-    /// The underlying session object.
-    session: Session,
+    /// The inner session used to interact with the session store.
+    session: BaseSession,
+}
+
+/// A session generated prior to full authentication of a user. This should
+/// be generated once a user has successfully submitted primary credentials,
+/// and used to keep track of that user as they continue with MFA.
+#[derive(Clone)]
+pub struct PreAuthenticationSession {
+    /// The inner session used to interact with the session store.
+    session: BaseSession,
+}
+
+/// A session used for onboarding a new user. Created when the registration
+/// process begins, and deleted once it is complete. Used to store submitted
+/// user data between phases of onboarding.
+#[derive(Clone)]
+pub struct RegistrationSession {
+    /// The inner session used to interact with the session store.
+    session: BaseSession,
+}
+
+impl SessionTrait for AuthenticatedSession {
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError> {
+        Ok(
+            BaseSession::get(token, store::SessionType::Authenticated, session_store_conn)
+                .await?
+                .map(|session| Self { session }),
+        )
+    }
+    fn token(&self) -> String {
+        self.session.token.clone()
+    }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Authenticated)
+            .await
+    }
 }
 
 impl AuthenticatedSession {
-    /// Get a reference to this session's token.
-    pub fn token(&self) -> &str {
-        &self.session.token
-    }
-    /// Get the user ID authenticated by this session.
-    pub const fn user_id(&self) -> u64 {
-        self.session.user_id
-    }
-
-    /// Constructs an `AuthenticatedSession` from an existing authenticated
-    /// Session object. This *DOES NOT* authenticate the session, and it
-    /// will fail if the session is not already authenticated. Use
-    /// `Session::authenticate` to convert an unauthenticated session to an
-    /// authenticated one.
-    pub async fn try_from_session(
-        session: Session,
-        session_store_conn: &mut Connection,
-    ) -> Result<Self, errors::SessionPromotionError> {
-        let session_info = session_store_conn
-            .info(&session.token)
-            .await?
-            .ok_or(errors::SessionPromotionError::InvalidSession)?;
-        if session_info.authenticated {
-            Ok(Self { session })
-        } else {
-            Err(errors::SessionPromotionError::NotAuthenticated)
-        }
+    /// Get the ID of the user authenticated by this session.
+    pub fn user_id(&self) -> u32 {
+        self.session
+            .info()
+            .as_auth()
+            .expect("Attempted to convert a registration session to an authentication session.")
     }
 }
 
-impl From<AuthenticatedSession> for Session {
-    fn from(authenticated_session: AuthenticatedSession) -> Self {
-        authenticated_session.session
+impl PreAuthenticationSession {
+    /// Create a new preauthentication session given a user ID.
+    pub async fn create(
+        user_id: u32,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Self, errors::SessionStorageError> {
+        let session = BaseSession::create(
+            SessionInfo::PreAuthentication { user_id },
+            session_store_conn,
+        )
+        .await?;
+        session
+            .set_expiry(PREAUTH_SESSION_TIMEOUT, session_store_conn)
+            .await?;
+        Ok(Self { session })
+    }
+    /// Promote this preauthentication session to a fully authenticated one.
+    /// Consumes the original session, who's token will no longer be valid,
+    /// and generates a completely new session.
+    pub async fn promote(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<AuthenticatedSession, errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.session.token, store::SessionType::PreAuthentication)
+            .await?;
+        let session = BaseSession::create(
+            SessionInfo::Authenticated {
+                user_id: self.session.info().as_auth().expect(
+                    "Attempted to promote a registration session to an authenticated session.",
+                ),
+            },
+            session_store_conn,
+        )
+        .await?;
+        session
+            .set_expiry(SESSION_TIMEOUT, session_store_conn)
+            .await?;
+        Ok(AuthenticatedSession { session })
+    }
+    /// Get the user ID associated with this session.
+    pub fn user_id(&self) -> u32 {
+        self.session
+            .info()
+            .as_auth()
+            .expect("Attempted to convert a registration session to a preauth session.")
     }
 }
 
-impl Session {
+impl SessionTrait for PreAuthenticationSession {
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError> {
+        Ok(BaseSession::get(
+            token,
+            store::SessionType::PreAuthentication,
+            session_store_conn,
+        )
+        .await?
+        .map(|session| Self { session }))
+    }
+
+    fn token(&self) -> String {
+        self.session.token.clone()
+    }
+
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::PreAuthentication)
+            .await
+    }
+}
+
+impl SessionTrait for RegistrationSession {
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError> {
+        Ok(
+            BaseSession::get(token, store::SessionType::Registration, session_store_conn)
+                .await?
+                .map(|session| Self { session }),
+        )
+    }
+    fn token(&self) -> String {
+        self.session.token.clone()
+    }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Registration)
+            .await
+    }
+}
+
+impl RegistrationSession {
+    /// Create a registration session from a set of user data.
+    pub async fn create(
+        user_data: AppUserInsert,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Self, errors::SessionStorageError> {
+        let session = BaseSession::create(
+            store::SessionInfo::Registration { user_data },
+            session_store_conn,
+        )
+        .await?;
+        session
+            .set_expiry(REGISTRATION_SESSION_TIMEOUT, session_store_conn)
+            .await?;
+        Ok(Self { session })
+    }
+    /// Return the user data associated with this registration session.
+    pub fn user_data(&self) -> AppUserInsert {
+        self.session
+            .info()
+            .as_registration()
+            .expect("Attempted to convert an authentication session to a registration session.")
+    }
+}
+
+impl BaseSession {
     /// Create a new session for a given user. This session is not considered
     /// fully authenticated until ``Self::authenticate`` is called on it.
-    pub async fn create(
-        user_id: u64,
+    async fn create(
+        session_info: SessionInfo,
         session_store_conn: &mut Connection,
     ) -> Result<Self, errors::SessionStorageError> {
         let token = loop {
             // Loop infinitely and return a token once we successful store the session.
             let candidate = generate_session_token();
             match session_store_conn
-                .create(
-                    &candidate,
-                    SessionInfo {
-                        user_id,
-                        authenticated: false,
-                    },
-                )
+                .create(&candidate, session_info.clone())
                 .await
             {
                 Ok(()) => break candidate, // return candidate from loop
@@ -96,46 +256,40 @@ impl Session {
                 },
             }
         };
-        session_store_conn
-            .set_expiry(&token, AUTH_SESSION_TIMEOUT)
-            .await?;
-        Ok(Self { token, user_id })
+        Ok(Self {
+            token,
+            session_info,
+        })
     }
-    /// Get a session given its identifying session token. Returns an `Option::None`
-    /// if the token is not valid.
-    pub async fn get(
+
+    /// Get a session given its token and session type.
+    async fn get(
         token: &str,
+        session_type: store::SessionType,
         session_store_conn: &mut Connection,
     ) -> Result<Option<Self>, store::errors::SessionStorageError> {
-        Ok(session_store_conn.info(token).await?.map(|info| Self {
-            token: token.to_owned(),
-            user_id: info.user_id,
-        }))
+        Ok(session_store_conn
+            .get_info(token, session_type)
+            .await?
+            .map(|session_info| Self {
+                token: token.to_owned(),
+                session_info,
+            }))
     }
-    /// Get this session's authenticated user ID.
-    pub const fn user_id(&self) -> u64 {
-        self.user_id
-    }
-    /// Get this session's token.
-    pub fn token(&self) -> &str {
-        &self.token
-    }
-    /// Verify that this session has been fully authenticated. This should
-    /// only be called once (relative) certainty has been achieved that the
-    /// associated user is who they say they are. This function returns an
-    /// ``AuthenticatedSession``, and future calls to ``AuthenticatedSession::try_from_session``
-    /// on ``Session`` objects with the same token will succeed.
-    pub async fn authenticate(
-        self,
+
+    /// Set the expiry time (in seconds) for this session.
+    async fn set_expiry(
+        &self,
+        seconds: u32,
         session_store_conn: &mut Connection,
-    ) -> Result<AuthenticatedSession, store::errors::SessionStorageError> {
+    ) -> Result<(), errors::SessionStorageError> {
         session_store_conn
-            .set_authenticated(&self.token, true)
-            .await?;
-        session_store_conn
-            .set_expiry(&self.token, SESSION_TIMEOUT)
-            .await?;
-        Ok(AuthenticatedSession { session: self })
+            .set_expiry(&self.token, seconds, self.session_info.clone().into())
+            .await
+    }
+    /// Get this session's associated information.
+    pub fn info(&self) -> SessionInfo {
+        self.session_info.clone()
     }
 }
 
@@ -162,4 +316,7 @@ pub mod errors {
             SessionStorageError,
         ),
     }
+
+    #[derive(Error, Debug)]
+    pub enum SessionAuthenticationError {}
 }
