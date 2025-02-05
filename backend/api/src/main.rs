@@ -28,7 +28,7 @@ async fn main() {
         .nest("/auth", routes::auth::create_router(&state))
         .nest("/onboard", routes::registration::create_router(&state))
         .with_state(state);
-    let listener = TcpListener::bind("0.0.0.0:8080")
+    let listener = TcpListener::bind("0.0.0.0:80")
         .await
         .expect("Failed to bind listener");
     axum::serve(listener, app)

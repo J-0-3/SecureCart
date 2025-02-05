@@ -8,21 +8,23 @@ services:
       - POSTGRES_DB=securecart
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "securecart", "-d", "securecart"]
-      interval: 1s
-      retries: 30
+      interval: 30s
+      start_interval: 5s
+      start_period: 30s
+      retries: 5
 
   redis:
     image: redis:latest
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 1s
-      retries: 30
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
 
   api:
     build: 
       context: backend/api
-    ports:
-      - '127.0.0.1:8080:8080'
     environment:
       - DB_USERNAME=securecart
       - DB_DATABASE=securecart
@@ -36,3 +38,34 @@ services:
       redis:
         condition: service_healthy
         restart: true
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+
+  frontend:
+    build: frontend
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+
+  nginx:
+    build: nginx
+    ports:
+      - 8443:8443
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
