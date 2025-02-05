@@ -1,25 +1,21 @@
-FROM rust:alpine AS chef
+FROM rust:alpine AS builder
+
 RUN apk add musl-dev
-RUN cargo install cargo-chef
 WORKDIR /app
-
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 ENV SQLX_OFFLINE=false
 RUN cargo build --release --target=x86_64-unknown-linux-musl
 
-FROM scratch
+FROM alpine:latest
+RUN apk add curl
+
 ARG DB_HOST
 ARG REDIS_HOST
 ARG DB_USERNAME
 ARG DB_DATABASE
 
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/securecart-api /app/service
+COPY /healthcheck.sh /bin/healthcheck.sh
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/securecart-api /bin/securecart-api
+RUN chmod +x /bin/healthcheck.sh
 
-CMD ["./app/service"]
+CMD ["./bin/securecart-api"]

@@ -23,10 +23,6 @@ time = { version = "0.3.37", features = ["macros"], default-features = false}
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"], default-features = false } 
 totp-rs = { version = "5.6.0"  }
 
-[profile.release]
-strip = true
-lto = true
-
 [lints.rust]
 unsafe_code = "forbid"
 
