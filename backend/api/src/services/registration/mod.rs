@@ -1,5 +1,5 @@
 //! Logic for onboarding and user registration.
-use super::sessions;
+use super::sessions::{self, SessionTrait as _};
 use crate::{
     db::{
         self,
@@ -48,6 +48,7 @@ pub async fn signup_add_credential_and_commit(
     registration_session: RegistrationSession,
     credential: PrimaryAuthenticationMethod,
     db_conn: &db::ConnectionPool,
+    session_store_conn: &mut sessions::store::Connection,
 ) -> Result<(), errors::StorageError> {
     let user_data = registration_session.user_data();
     let stored_user = user_data.store(db_conn).await?;
@@ -55,11 +56,14 @@ pub async fn signup_add_credential_and_commit(
         PrimaryAuthenticationMethod::Password { password } => {
             let password_model = PasswordInsert::new(stored_user.id(), &password);
             if let Err(err) = password_model.store(db_conn).await {
+                // Allow idempotency in the case of a storage failure by
+                // rolling back the state of the database (sort of).
                 stored_user.delete(db_conn).await?;
                 return Err(err.into());
             }
         }
     }
+    registration_session.delete(session_store_conn).await?;
     Ok(())
 }
 

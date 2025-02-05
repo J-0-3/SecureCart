@@ -73,8 +73,14 @@ async fn signup_add_credential(
     Extension(session): Extension<RegistrationSession>,
     Json(body): Json<SignUpAddCredentialRequest>,
 ) -> Result<(), StatusCode> {
-    registration::signup_add_credential_and_commit(session, body.credential, &state.db_conn)
-        .await?;
+    let mut session_store_conn = state.session_store_conn.clone();
+    registration::signup_add_credential_and_commit(
+        session,
+        body.credential,
+        &state.db_conn,
+        &mut session_store_conn,
+    )
+    .await?;
     Ok(())
 }
 

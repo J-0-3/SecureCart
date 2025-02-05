@@ -2,5 +2,7 @@
 
 /// Timeout for authenticated sessions in seconds.
 pub const SESSION_TIMEOUT: u32 = 7 * 24 * 60 * 60;
-/// Timeout for authentication sessions in seconds.
-pub const AUTH_SESSION_TIMEOUT: u32 = 300;
+/// Timeout for pre-authentication sessions in seconds.
+pub const PREAUTH_SESSION_TIMEOUT: u32 = 5 * 60;
+/// Timeout for registration sessions in seconds;
+pub const REGISTRATION_SESSION_TIMEOUT: u32 = 10 * 60;

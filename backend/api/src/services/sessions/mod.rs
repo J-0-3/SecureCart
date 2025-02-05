@@ -1,6 +1,6 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
 use crate::{
-    constants::sessions::{AUTH_SESSION_TIMEOUT, SESSION_TIMEOUT},
+    constants::sessions::{PREAUTH_SESSION_TIMEOUT, REGISTRATION_SESSION_TIMEOUT, SESSION_TIMEOUT},
     db::models::appuser::AppUserInsert,
 };
 pub mod store;
@@ -39,6 +39,11 @@ pub trait SessionTrait: Send + Sync + Clone + Sized {
     ) -> Result<Option<Self>, errors::SessionStorageError>;
     /// Get the session token which identifies this session.
     fn token(&self) -> String;
+    /// Delete this session, immediately invalidating it.
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError>;
 }
 
 /// A session which is guaranteed to have been fully authenticated. Can be
@@ -84,6 +89,14 @@ impl SessionTrait for AuthenticatedSession {
     fn token(&self) -> String {
         self.session.token.clone()
     }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Authenticated)
+            .await
+    }
 }
 
 impl AuthenticatedSession {
@@ -108,7 +121,7 @@ impl PreAuthenticationSession {
         )
         .await?;
         session
-            .set_expiry(AUTH_SESSION_TIMEOUT, session_store_conn)
+            .set_expiry(PREAUTH_SESSION_TIMEOUT, session_store_conn)
             .await?;
         Ok(Self { session })
     }
@@ -162,6 +175,15 @@ impl SessionTrait for PreAuthenticationSession {
     fn token(&self) -> String {
         self.session.token.clone()
     }
+
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::PreAuthentication)
+            .await
+    }
 }
 
 impl SessionTrait for RegistrationSession {
@@ -178,6 +200,14 @@ impl SessionTrait for RegistrationSession {
     fn token(&self) -> String {
         self.session.token.clone()
     }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Registration)
+            .await
+    }
 }
 
 impl RegistrationSession {
@@ -186,13 +216,15 @@ impl RegistrationSession {
         user_data: AppUserInsert,
         session_store_conn: &mut store::Connection,
     ) -> Result<Self, errors::SessionStorageError> {
-        Ok(Self {
-            session: BaseSession::create(
-                store::SessionInfo::Registration { user_data },
-                session_store_conn,
-            )
-            .await?,
-        })
+        let session = BaseSession::create(
+            store::SessionInfo::Registration { user_data },
+            session_store_conn,
+        )
+        .await?;
+        session
+            .set_expiry(REGISTRATION_SESSION_TIMEOUT, session_store_conn)
+            .await?;
+        Ok(Self { session })
     }
     /// Return the user data associated with this registration session.
     pub fn user_data(&self) -> AppUserInsert {
