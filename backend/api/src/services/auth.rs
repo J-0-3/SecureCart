@@ -60,9 +60,14 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
     }]
 }
 
+/// The outcome of an authentication attempt.
 pub enum AuthenticationOutcome {
+    /// The authentication was successful, and an ``AuthenticatedSession`` was created.
     Success(AuthenticatedSession),
+    /// The authentication was succesful, but further authentication is required. A
+    /// ``PreAuthenticationSession`` was created.
     Partial(PreAuthenticationSession),
+    /// The authentication was unsuccessful.
     Failure,
 }
 /// Authenticate with a primary authentication method, and return a session

@@ -10,20 +10,40 @@ use redis::{aio::MultiplexedConnection, AsyncCommands as _};
 pub struct Connection(MultiplexedConnection);
 
 #[derive(Copy, Clone)]
+/// The type of session represented by a `SessionInfo`. Corresponds directly to
+/// `SessionInfo` variants.
 pub enum SessionType {
+    /// A session used for authentication which is not yet complete.
     PreAuthentication,
+    /// An authenticated user session.
     Authenticated,
+    /// A sesssion used for onboarding.
     Registration,
 }
 
+/// Information stored alongside a session token.
 #[derive(Clone)]
 pub enum SessionInfo {
-    PreAuthentication { user_id: u32 },
-    Authenticated { user_id: u32 },
-    Registration { user_data: AppUserInsert },
+    /// Information stored with a `PreAuthentication` session token.
+    PreAuthentication {
+        /// The ID of the user in the process of authenticating with this token.
+        user_id: u32,
+    },
+    /// Information stored with an Authenticated session token.
+    Authenticated {
+        /// The ID of the user authenticated by this token.
+        user_id: u32,
+    },
+    /// Information stored with a Registration session token.
+    Registration {
+        /// User data to insert once the registration session completes.
+        user_data: AppUserInsert,
+    },
 }
 
 impl SessionType {
+    /// Convert this enum to a string representing its Redis parent key name.
+    /// Session data is stored under "{`SessionType::to_parent_key_name()}:{token`}"."
     fn to_parent_key_name(self) -> String {
         match self {
             Self::PreAuthentication => String::from("sessions:preauthentication"),
@@ -34,14 +54,8 @@ impl SessionType {
 }
 
 impl SessionInfo {
-    fn to_parent_key_name(&self) -> String {
-        match *self {
-            Self::PreAuthentication { .. } => String::from("sessions:preauthentication"),
-            Self::Authenticated { .. } => String::from("sessions:authenticated"),
-            Self::Registration { .. } => String::from("sessions:registration"),
-        }
-    }
-
+    /// Extract authentication data (user ID) from this session, and return an error if it is a
+    /// `RegistrationSession`.
     pub const fn as_auth(&self) -> Result<u32, ()> {
         match *self {
             Self::Registration { .. } => Err(()),
@@ -49,6 +63,7 @@ impl SessionInfo {
         }
     }
 
+    /// Extract user data from this, and return an error if it is not a `RegistrationSession`.
     pub fn as_registration(&self) -> Result<AppUserInsert, ()> {
         match *self {
             Self::Registration { ref user_data } => Ok(user_data.clone()),
@@ -77,6 +92,7 @@ impl Connection {
                 .await?,
         ))
     }
+    /// Store user data for a registration session in the store.
     async fn store_registration_data(
         &mut self,
         key: &str,
@@ -100,6 +116,8 @@ impl Connection {
         let _: () = self.0.hset(key, "age", data.age()).await?;
         Ok(())
     }
+    /// Store data for a regular (authenticated/preauthentication) session
+    /// in the store.
     async fn store_session_data(
         &mut self,
         key: &str,
@@ -113,6 +131,8 @@ impl Connection {
             Err(errors::SessionCreationError::Duplicate)
         }
     }
+    /// Get registration user data stored in the session store for a given
+    /// session.
     async fn get_registration_data(
         &mut self,
         key: &str,
@@ -134,6 +154,9 @@ impl Connection {
         )))
     }
 
+    /// Get the user ID associated with a session (will return a `SessionStorageError`
+    /// if the session doesn't have a `user_id` value, which will occur only if
+    /// this session is not a `PreAuthentication` or ``Authenticated`` session.)
     async fn get_session_user_id(
         &mut self,
         key: &str,
@@ -141,12 +164,16 @@ impl Connection {
         Ok(self.0.hget(key, "user_id").await?)
     }
 
+    /// Create a new session with a given token in the session store.
     pub(super) async fn create(
         &mut self,
         token: &str,
         session_info: SessionInfo,
     ) -> Result<(), errors::SessionCreationError> {
-        let key = format!("{}:{token}", session_info.to_parent_key_name());
+        let key = format!(
+            "{}:{token}",
+            SessionType::from(session_info.clone()).to_parent_key_name()
+        );
         if self.0.exists(&key).await? {
             return Err(errors::SessionCreationError::Duplicate);
         }

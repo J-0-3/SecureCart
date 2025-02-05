@@ -25,18 +25,19 @@ fn generate_session_token() -> String {
 pub struct BaseSession {
     /// The session token used to identify this session.
     token: String,
+    /// The information stored in this session.
     session_info: store::SessionInfo, // this might seem redundant due to the
                                       // wrapper classes, but it makes working
                                       // with the underlying store much easier
 }
 
-pub trait SessionTrait: Send + Sync + Clone {
+pub trait SessionTrait: Send + Sync + Clone + Sized {
+    /// Get an instance of this session type given the corresponding session token.
     async fn get(
         token: &str,
         session_store_conn: &mut store::Connection,
-    ) -> Result<Option<Self>, errors::SessionStorageError>
-    where
-        Self: Sized;
+    ) -> Result<Option<Self>, errors::SessionStorageError>;
+    /// Get the session token which identifies this session.
     fn token(&self) -> String;
 }
 
@@ -47,17 +48,25 @@ pub trait SessionTrait: Send + Sync + Clone {
 /// authenticated within the session store.
 #[derive(Clone)]
 pub struct AuthenticatedSession {
-    /// The underlying session object.
+    /// The inner session used to interact with the session store.
     session: BaseSession,
 }
 
+/// A session generated prior to full authentication of a user. This should
+/// be generated once a user has successfully submitted primary credentials,
+/// and used to keep track of that user as they continue with MFA.
 #[derive(Clone)]
 pub struct PreAuthenticationSession {
+    /// The inner session used to interact with the session store.
     session: BaseSession,
 }
 
+/// A session used for onboarding a new user. Created when the registration
+/// process begins, and deleted once it is complete. Used to store submitted
+/// user data between phases of onboarding.
 #[derive(Clone)]
 pub struct RegistrationSession {
+    /// The inner session used to interact with the session store.
     session: BaseSession,
 }
 
@@ -78,6 +87,7 @@ impl SessionTrait for AuthenticatedSession {
 }
 
 impl AuthenticatedSession {
+    /// Get the ID of the user authenticated by this session.
     pub fn user_id(&self) -> u32 {
         self.session
             .info()
@@ -87,6 +97,7 @@ impl AuthenticatedSession {
 }
 
 impl PreAuthenticationSession {
+    /// Create a new preauthentication session given a user ID.
     pub async fn create(
         user_id: u32,
         session_store_conn: &mut store::Connection,
@@ -101,6 +112,9 @@ impl PreAuthenticationSession {
             .await?;
         Ok(Self { session })
     }
+    /// Promote this preauthentication session to a fully authenticated one.
+    /// Consumes the original session, who's token will no longer be valid,
+    /// and generates a completely new session.
     pub async fn promote(
         self,
         session_store_conn: &mut store::Connection,
@@ -122,6 +136,7 @@ impl PreAuthenticationSession {
             .await?;
         Ok(AuthenticatedSession { session })
     }
+    /// Get the user ID associated with this session.
     pub fn user_id(&self) -> u32 {
         self.session
             .info()
@@ -166,6 +181,7 @@ impl SessionTrait for RegistrationSession {
 }
 
 impl RegistrationSession {
+    /// Create a registration session from a set of user data.
     pub async fn create(
         user_data: AppUserInsert,
         session_store_conn: &mut store::Connection,
@@ -178,6 +194,7 @@ impl RegistrationSession {
             .await?,
         })
     }
+    /// Return the user data associated with this registration session.
     pub fn user_data(&self) -> AppUserInsert {
         self.session
             .info()
@@ -213,6 +230,7 @@ impl BaseSession {
         })
     }
 
+    /// Get a session given its token and session type.
     async fn get(
         token: &str,
         session_type: store::SessionType,
@@ -227,6 +245,7 @@ impl BaseSession {
             }))
     }
 
+    /// Set the expiry time (in seconds) for this session.
     async fn set_expiry(
         &self,
         seconds: u32,
@@ -236,6 +255,7 @@ impl BaseSession {
             .set_expiry(&self.token, seconds, self.session_info.clone().into())
             .await
     }
+    /// Get this session's associated information.
     pub fn info(&self) -> SessionInfo {
         self.session_info.clone()
     }

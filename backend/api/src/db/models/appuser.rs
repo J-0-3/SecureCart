@@ -63,11 +63,13 @@ impl AppUserInsert {
         ).fetch_one(db_client).await?)
     }
 
+    /// Return the email address to store.
     pub fn email(&self) -> EmailAddress {
         EmailAddress::try_from(self.email.clone())
             .expect("Solar bit flip has changed an email address")
     }
 
+    /// Return the age value of this `AppUserInsert`.
     pub fn age(&self) -> u8 {
         u8::try_from(self.age).expect("Somehow a non-u8 value got into an AppUserInsert.")
     }

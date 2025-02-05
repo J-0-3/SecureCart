@@ -1,3 +1,4 @@
+//! Logic for onboarding and user registration.
 use super::sessions;
 use crate::{
     db::{
@@ -11,6 +12,7 @@ use crate::{
 };
 use serde::Deserialize;
 
+/// Begin a signup session, setting the initial user information.
 pub async fn signup_init(
     user_data: AppUserInsert,
     session_store_conn: &mut sessions::store::Connection,
@@ -28,10 +30,20 @@ pub async fn signup_init(
         .map_err(errors::StorageError::from)?)
 }
 
+/// The primary authentication method being registered by the user. Corresponds
+/// `services::auth::PrimaryAuthenticationMethod`, but contains material used to
+/// generate the authentication method, rather than to authenticate it.
 #[derive(Deserialize)]
 pub enum PrimaryAuthenticationMethod {
-    Password { password: String },
+    /// Simple password authentication.
+    Password {
+        /// The raw password material.
+        password: String,
+    },
 }
+
+/// Add credentials to a user during a onboarding session and save the user data
+/// to the database.
 pub async fn signup_add_credential_and_commit(
     registration_session: RegistrationSession,
     credential: PrimaryAuthenticationMethod,
@@ -51,14 +63,18 @@ pub async fn signup_add_credential_and_commit(
     Ok(())
 }
 
+/// Erors returned by this service.
 pub mod errors {
     pub use super::super::errors::StorageError;
     use thiserror::Error;
 
+    /// Errors returned while initiating an onboarding session.
     #[derive(Error, Debug)]
     pub enum SignupInitError {
+        /// An error in the underlying storage
         #[error(transparent)]
         StorageError(#[from] StorageError),
+        /// The signup attempt uses an email which is already registered.
         #[error("Email is already is use")]
         DuplicateEmail,
     }

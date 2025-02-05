@@ -1,3 +1,4 @@
+//! Routes for onboarding and user registration.
 use crate::{
     db::models::appuser::AppUserInsert,
     middleware::auth::session_middleware,
@@ -17,6 +18,7 @@ use axum::{
 use axum_extra::extract::{cookie::Cookie, CookieJar};
 use serde::Deserialize;
 
+/// Create a router for the /onboarding route.
 pub fn create_router(state: &AppState) -> Router<AppState> {
     Router::new()
         .route("/credential", post(signup_add_credential))
@@ -28,15 +30,22 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .route("/signup", post(signup_init))
 }
 
+/// The root route for /onboarding, which does nothing.
 async fn root() -> Json<String> {
     Json("Registration service is running!".to_owned())
 }
 
+/// Request body for /onboard/signup.
 #[derive(Deserialize)]
 struct SignUpInitRequest {
+    /// The user data to store for the new user.
     pub user_data: AppUserInsert,
 }
 
+/// This route initialises the onboarding process by creating a temporary
+/// registration session with the user's data associated with it. The database
+/// will not be modified until the signup process is fully complete, and the
+/// data will be deleted after the registration timeout period expires.
 async fn signup_init(
     cookies: CookieJar,
     State(state): State<AppState>,
@@ -49,11 +58,16 @@ async fn signup_init(
     Ok(cookies.add(Cookie::build(("SESSION", session.token())).http_only(true)))
 }
 
+/// Request body for /onboard/credential.
 #[derive(Deserialize)]
 struct SignUpAddCredentialRequest {
+    /// The actual credential being added.
     pub credential: PrimaryAuthenticationMethod,
 }
 
+/// This route completes the onboarding process by assigning the user a credential
+/// by which they can sign in. Once this is done all data will be saved to the
+/// database for future logins, and the registration session will be expired.
 async fn signup_add_credential(
     State(state): State<AppState>,
     Extension(session): Extension<RegistrationSession>,
