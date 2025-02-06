@@ -1,13 +1,7 @@
-async function checkAuthRedirect() {
-    let response = await fetch("/api/auth/whoami");
-    let redirect_message = document.getElementById("redirect-message");
-    if (redirect_message === null) {
-        throw new Error("redirect-message element not defined");
-    }
-    let redirect_link = document.getElementById("redirect-link");
-    if (redirect_link === null || !(redirect_link instanceof HTMLAnchorElement)) {
-        throw new Error("redirect-link is not a link.");
-    }
+async function check_auth_and_redirect() {
+    const response = await fetch("/api/auth/whoami");
+    const redirect_message = document.getElementById("redirect-message")!;
+    const redirect_link = <HTMLAnchorElement>document.getElementById("redirect-link")!;
     if (response.status == 200) {
         redirect_link.href = "/store.html";
         redirect_message.hidden = false;
@@ -22,3 +16,5 @@ async function checkAuthRedirect() {
         window.location.replace(`/error/${response.status}.html`)
     }
 }
+
+document.addEventListener("DOMContentLoaded", check_auth_and_redirect)
