@@ -75,6 +75,51 @@ pub struct RegistrationSession {
     session: BaseSession,
 }
 
+/// A session which has been fully authenticated and authorized to have
+/// administrative access. Note that this is mutally exclusive with
+/// having recular authenticated user access.
+#[derive(Clone)]
+pub struct AdministrativeSession {
+    /// The inner session used to interact with the session store.
+    session: BaseSession,
+}
+
+impl SessionTrait for AdministrativeSession {
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError> {
+        Ok(BaseSession::get(
+            token,
+            store::SessionType::Administrative,
+            session_store_conn,
+        )
+        .await?
+        .map(|session| Self { session }))
+    }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Administrative)
+            .await
+    }
+    fn token(&self) -> String {
+        self.session.token.clone()
+    }
+}
+
+impl AdministrativeSession {
+    /// Get the user ID of the admin identified by this session.
+    pub fn user_id(&self) -> u32 {
+        self.session
+            .info()
+            .as_auth()
+            .expect("Tried to convert a registration session to an authentication session")
+    }
+}
+
 impl SessionTrait for AuthenticatedSession {
     async fn get(
         token: &str,
