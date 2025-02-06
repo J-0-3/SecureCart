@@ -71,6 +71,8 @@ struct AuthenticateRequest {
 struct AuthenticateResponse {
     /// Whether further authentication is required.
     pub mfa_required: bool,
+    /// Whether the session is administrative, None if MFA is required.
+    pub is_admin: Option<bool>,
 }
 
 async fn login(
@@ -86,17 +88,23 @@ async fn login(
         &mut session_store,
     )
     .await?;
-    let (mfa_required, token) = match outcome {
+    let (mfa_required, is_admin, token) = match outcome {
         auth::AuthenticationOutcome::Failure => {
             eprintln!("Failed authentication as {}", body.email);
             return Err(StatusCode::UNAUTHORIZED);
         }
-        auth::AuthenticationOutcome::Success(session) => (false, session.token()),
-        auth::AuthenticationOutcome::Partial(session) => (true, session.token()),
+        auth::AuthenticationOutcome::SuccessAdministrative(session) => {
+            (false, Some(true), session.token())
+        }
+        auth::AuthenticationOutcome::Success(session) => (false, Some(false), session.token()),
+        auth::AuthenticationOutcome::Partial(session) => (true, None, session.token()),
     };
     Ok((
         cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
-        Json(AuthenticateResponse { mfa_required }),
+        Json(AuthenticateResponse {
+            mfa_required,
+            is_admin,
+        }),
     ))
 }
 

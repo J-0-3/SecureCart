@@ -44,7 +44,7 @@ pub struct AppUser {
     /// The user's age.
     age: i16,
     /// The user's role (customer or admin).
-    role: AppUserRole,
+    pub role: AppUserRole,
 }
 
 impl AppUserInsert {

@@ -1,6 +1,9 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
 use crate::{
-    constants::sessions::{PREAUTH_SESSION_TIMEOUT, REGISTRATION_SESSION_TIMEOUT, SESSION_TIMEOUT},
+    constants::sessions::{
+        ADMIN_SESSION_TIMEOUT, PREAUTH_SESSION_TIMEOUT, REGISTRATION_SESSION_TIMEOUT,
+        SESSION_TIMEOUT,
+    },
     db::models::appuser::AppUserInsert,
 };
 pub mod store;
@@ -193,6 +196,30 @@ impl PreAuthenticationSession {
             .set_expiry(SESSION_TIMEOUT, session_store_conn)
             .await?;
         Ok(AuthenticatedSession { session })
+    }
+
+    /// Promote this session to an administrative session. Should ONLY be done
+    /// if you have already verified that the user has admin authorization.
+    pub async fn promote_to_admin(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<AdministrativeSession, errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.session.token, store::SessionType::PreAuthentication)
+            .await?;
+        let session = BaseSession::create(
+            SessionInfo::Administrative {
+                user_id: self.session.info().as_auth().expect(
+                    "Attempted to promote a registration session to an administrative session.",
+                ),
+            },
+            session_store_conn,
+        )
+        .await?;
+        session
+            .set_expiry(ADMIN_SESSION_TIMEOUT, session_store_conn)
+            .await?;
+        Ok(AdministrativeSession { session })
     }
     /// Get the user ID associated with this session.
     pub fn user_id(&self) -> u32 {

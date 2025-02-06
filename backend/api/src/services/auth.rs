@@ -2,11 +2,17 @@
 use crate::{
     db::{
         self,
-        models::{appuser::AppUser, password::Password, totp::Totp},
+        models::{
+            appuser::{AppUser, AppUserRole},
+            password::Password,
+            totp::Totp,
+        },
     },
     services::sessions::{self, AuthenticatedSession, PreAuthenticationSession},
 };
 use serde::{Deserialize, Serialize};
+
+use super::sessions::AdministrativeSession;
 
 #[derive(Serialize, Deserialize)]
 /// A method used for the primary authentication for a user.
@@ -69,6 +75,8 @@ pub enum AuthenticationOutcome {
     Partial(PreAuthenticationSession),
     /// The authentication was unsuccessful.
     Failure,
+    /// The authentication was successful, and an ``AdministrativeSession`` was created.
+    SuccessAdministrative(AdministrativeSession),
 }
 /// Authenticate with a primary authentication method, and return a session
 /// if successful. The session is not guaranteed to be fully authenticated,
@@ -91,9 +99,14 @@ pub async fn authenticate(
     let user_id = user.id();
     let session = PreAuthenticationSession::create(user_id, session_store_conn).await?;
     if Totp::select(user_id, db_conn).await?.is_none() {
-        Ok(AuthenticationOutcome::Success(
-            session.promote(session_store_conn).await?,
-        ))
+        match user.role {
+            AppUserRole::Customer => Ok(AuthenticationOutcome::Success(
+                session.promote(session_store_conn).await?,
+            )),
+            AppUserRole::Administrator => Ok(AuthenticationOutcome::SuccessAdministrative(
+                session.promote_to_admin(session_store_conn).await?,
+            )),
+        }
     } else {
         Ok(AuthenticationOutcome::Partial(session))
     }
