@@ -69,6 +69,7 @@ impl AppUserInsert {
         role: AppUserRole,
         db_client: &ConnectionPool,
     ) -> Result<AppUser, DatabaseError> {
+        #[expect(clippy::as_conversions, reason="Used in query_as! macro for Postgres coersion")]
         Ok(query_as!(
             AppUser,
             r#"INSERT INTO appuser (email, forename, surname, age, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, forename, surname, age, role AS "role!: AppUserRole""#,

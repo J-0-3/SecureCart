@@ -141,9 +141,13 @@ async fn validate_2fa(
     }
 }
 
+/// Outcome of a 2-factor authentication attempt.
 pub enum AuthenticationOutcome2fa {
+    /// The authentication was successful, an `AuthenticatedSession` was created.
     Success(AuthenticatedSession),
+    /// The authentication was successful, an `AdministrativeSession` was created.
     SuccessAdministrative(AdministrativeSession),
+    /// The authentication was unsuccessful.
     Failure,
 }
 

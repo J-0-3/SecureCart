@@ -147,6 +147,7 @@ struct MfaAuthenticateRequest {
 
 #[derive(Serialize)]
 struct MfaAuthenticateResponse {
+    /// Whether the new session is administrative.
     is_admin: bool,
 }
 
