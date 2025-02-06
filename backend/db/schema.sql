@@ -1,9 +1,12 @@
+CREATE TYPE app_user_role AS ENUM ('Customer', 'Administrator');
+
 CREATE TABLE appuser (
     id BIGSERIAL PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     forename TEXT NOT NULL,
     surname TEXT NOT NULL,
-    age SMALLINT NOT NULL
+    age SMALLINT NOT NULL,
+    role app_user_role NOT NULL
 );
 
 CREATE TABLE password (
