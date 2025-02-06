@@ -19,6 +19,8 @@ pub enum SessionType {
     Authenticated,
     /// A sesssion used for onboarding.
     Registration,
+    /// A session authentiated as an admin user.
+    Administrative,
 }
 
 /// Information stored alongside a session token.
@@ -39,6 +41,11 @@ pub enum SessionInfo {
         /// User data to insert once the registration session completes.
         user_data: AppUserInsert,
     },
+    /// Information stored with an Administrative session token.
+    Administrative {
+        /// The ID of the user authenticated by this token.
+        user_id: u32,
+    },
 }
 
 impl SessionType {
@@ -49,6 +56,7 @@ impl SessionType {
             Self::PreAuthentication => String::from("sessions:preauthentication"),
             Self::Authenticated => String::from("sessions:authenticated"),
             Self::Registration => String::from("sessions:registration"),
+            Self::Administrative => String::from("sessions:administrative"),
         }
     }
 }
@@ -59,7 +67,9 @@ impl SessionInfo {
     pub const fn as_auth(&self) -> Result<u32, ()> {
         match *self {
             Self::Registration { .. } => Err(()),
-            Self::PreAuthentication { user_id } | Self::Authenticated { user_id } => Ok(user_id),
+            Self::PreAuthentication { user_id }
+            | Self::Authenticated { user_id }
+            | Self::Administrative { user_id } => Ok(user_id),
         }
     }
 
@@ -67,7 +77,9 @@ impl SessionInfo {
     pub fn as_registration(&self) -> Result<AppUserInsert, ()> {
         match *self {
             Self::Registration { ref user_data } => Ok(user_data.clone()),
-            Self::PreAuthentication { .. } | Self::Authenticated { .. } => Err(()),
+            Self::PreAuthentication { .. }
+            | Self::Authenticated { .. }
+            | Self::Administrative { .. } => Err(()),
         }
     }
 }
@@ -78,6 +90,7 @@ impl From<SessionInfo> for SessionType {
             SessionInfo::PreAuthentication { .. } => Self::PreAuthentication,
             SessionInfo::Authenticated { .. } => Self::Authenticated,
             SessionInfo::Registration { .. } => Self::Registration,
+            SessionInfo::Administrative { .. } => Self::Administrative,
         }
     }
 }
@@ -181,7 +194,9 @@ impl Connection {
             SessionInfo::Registration { user_data } => {
                 self.store_registration_data(&key, user_data).await
             }
-            SessionInfo::PreAuthentication { user_id } | SessionInfo::Authenticated { user_id } => {
+            SessionInfo::PreAuthentication { user_id }
+            | SessionInfo::Authenticated { user_id }
+            | SessionInfo::Administrative { user_id } => {
                 self.store_session_data(&key, user_id).await
             }
         }
@@ -224,6 +239,10 @@ impl Connection {
                 .get_session_user_id(&key)
                 .await?
                 .map(|user_id| SessionInfo::Authenticated { user_id }),
+            SessionType::Administrative => self
+                .get_session_user_id(&key)
+                .await?
+                .map(|user_id| SessionInfo::Administrative { user_id }),
             SessionType::Registration => self
                 .get_registration_data(&key)
                 .await?
