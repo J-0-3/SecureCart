@@ -145,23 +145,33 @@ struct MfaAuthenticateRequest {
     credential: auth::MfaAuthenticationMethod,
 }
 
+#[derive(Serialize)]
+struct MfaAuthenticateResponse {
+    is_admin: bool,
+}
+
 /// Authenticate using an MFA method.
 async fn authenticate_2fa(
     cookies: CookieJar,
     State(state): State<AppState>,
     Extension(session): Extension<PreAuthenticationSession>,
     Json(body): Json<MfaAuthenticateRequest>,
-) -> Result<CookieJar, StatusCode> {
+) -> Result<(CookieJar, Json<MfaAuthenticateResponse>), StatusCode> {
     let mut session_store = state.session_store_conn.clone();
-    let user_id = session.user_id();
-    let authenticated_session =
+    let outcome =
         auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
-            .await?
-            .ok_or_else(|| {
-                eprintln!("Failed MFA authentication for user {user_id}.");
-                StatusCode::UNAUTHORIZED
-            })?;
-    Ok(cookies.add(Cookie::build(("SESSION", authenticated_session.token())).http_only(true)))
+            .await?;
+    match outcome {
+        auth::AuthenticationOutcome2fa::Failure => Err(StatusCode::UNAUTHORIZED),
+        auth::AuthenticationOutcome2fa::Success(new_session) => Ok((
+            cookies.add(Cookie::build(("SESSION", new_session.token())).http_only(true)),
+            Json(MfaAuthenticateResponse { is_admin: false }),
+        )),
+        auth::AuthenticationOutcome2fa::SuccessAdministrative(new_session) => Ok((
+            cookies.add(Cookie::build(("SESSION", new_session.token())).http_only(true)),
+            Json(MfaAuthenticateResponse { is_admin: true }),
+        )),
+    }
 }
 
 impl From<StorageError> for StatusCode {

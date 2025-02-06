@@ -109,10 +109,10 @@ impl AppUser {
     }
     /// Select an `AppUser` from the database by ID.
     pub async fn select_one(
-        id: i64,
+        id: u32,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(Self, r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser WHERE id = $1"#, &id)
+        Ok(query_as!(Self, r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser WHERE id = $1"#, i64::from(id))
             .fetch_optional(db_client)
             .await?)
     }

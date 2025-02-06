@@ -141,17 +141,33 @@ async fn validate_2fa(
     }
 }
 
+pub enum AuthenticationOutcome2fa {
+    Success(AuthenticatedSession),
+    SuccessAdministrative(AdministrativeSession),
+    Failure,
+}
+
 /// Authenticate a partially authenticated user using an MFA method.
 pub async fn authenticate_2fa(
     session: PreAuthenticationSession,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
-) -> Result<Option<AuthenticatedSession>, super::errors::StorageError> {
+) -> Result<AuthenticationOutcome2fa, super::errors::StorageError> {
+    let user = AppUser::select_one(session.user_id(), db_conn)
+        .await?
+        .expect("User was deleting while authenticating session. Bailing.");
     if validate_2fa(session.user_id(), method, db_conn).await? {
-        Ok(Some(session.promote(session_store_conn).await?))
+        match user.role {
+            AppUserRole::Customer => Ok(AuthenticationOutcome2fa::Success(
+                session.promote(session_store_conn).await?,
+            )),
+            AppUserRole::Administrator => Ok(AuthenticationOutcome2fa::SuccessAdministrative(
+                session.promote_to_admin(session_store_conn).await?,
+            )),
+        }
     } else {
-        Ok(None)
+        Ok(AuthenticationOutcome2fa::Failure)
     }
 }
 
