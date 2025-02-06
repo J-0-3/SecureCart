@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM appuser",
+  "query": "SELECT id, email, forename, surname, age, role AS \"role!: AppUserRole\" FROM appuser WHERE email = $1",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,30 @@
         "ordinal": 4,
         "name": "age",
         "type_info": "Int2"
+      },
+      {
+        "ordinal": 5,
+        "name": "role!: AppUserRole",
+        "type_info": {
+          "Custom": {
+            "name": "app_user_role",
+            "kind": {
+              "Enum": [
+                "Customer",
+                "Administrator"
+              ]
+            }
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text"
+      ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -40,5 +58,5 @@
       false
     ]
   },
-  "hash": "9866f719ebb354a6ea4103c35417ef6d19f5c2ede620f28ded21e8e549ef1c69"
+  "hash": "f19f832af2e0dd1e443d6d6274620efd77f370276c4c1841fa0b723844cdef89"
 }
