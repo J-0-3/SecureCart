@@ -8,11 +8,11 @@ use crate::{
             totp::Totp,
         },
     },
-    services::sessions::{self, AuthenticatedSession, PreAuthenticationSession},
+    services::sessions::{self, CustomerSession, PreAuthenticationSession},
 };
 use serde::{Deserialize, Serialize};
 
-use super::sessions::AdministrativeSession;
+use super::sessions::AdministratorSession;
 
 #[derive(Serialize, Deserialize)]
 /// A method used for the primary authentication for a user.
@@ -69,14 +69,14 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
 /// The outcome of an authentication attempt.
 pub enum AuthenticationOutcome {
     /// The authentication was successful, and an ``AuthenticatedSession`` was created.
-    Success(AuthenticatedSession),
+    Success(CustomerSession),
     /// The authentication was succesful, but further authentication is required. A
     /// ``PreAuthenticationSession`` was created.
     Partial(PreAuthenticationSession),
     /// The authentication was unsuccessful.
     Failure,
     /// The authentication was successful, and an ``AdministrativeSession`` was created.
-    SuccessAdministrative(AdministrativeSession),
+    SuccessAdministrative(AdministratorSession),
 }
 /// Authenticate with a primary authentication method, and return a session
 /// if successful. The session is not guaranteed to be fully authenticated,
@@ -144,9 +144,9 @@ async fn validate_2fa(
 /// Outcome of a 2-factor authentication attempt.
 pub enum AuthenticationOutcome2fa {
     /// The authentication was successful, an `AuthenticatedSession` was created.
-    Success(AuthenticatedSession),
+    Success(CustomerSession),
     /// The authentication was successful, an `AdministrativeSession` was created.
-    SuccessAdministrative(AdministrativeSession),
+    SuccessAdministrative(AdministratorSession),
     /// The authentication was unsuccessful.
     Failure,
 }

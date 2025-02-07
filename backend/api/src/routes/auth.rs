@@ -4,7 +4,10 @@ use crate::{
     services::{
         auth,
         errors::StorageError,
-        sessions::{self, AuthenticatedSession, PreAuthenticationSession, SessionTrait as _},
+        sessions::{
+            self, AdministratorSession, CustomerSession, PreAuthenticationSession,
+            SessionTrait as _,
+        },
     },
     state::AppState,
 };
@@ -20,23 +23,34 @@ use serde::{Deserialize, Serialize};
 
 /// Create a router for the /auth route.
 pub fn create_router(state: &AppState) -> Router<AppState> {
-    let mfa_router = Router::new()
-        .route("/", get(get_mfa_methods))
-        .route("/", post(authenticate_2fa))
+    let unauthenticated = Router::new()
+        .route("/", get(root))
+        .route("/methods", get(list_methods))
+        .route("/login", post(login));
+    let pre_authenticated = Router::new()
+        .route("/2fa/methods", get(get_mfa_methods))
+        .route("/2fa", post(authenticate_2fa))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<PreAuthenticationSession>,
         ));
-    Router::new()
-        .route("/whoami", get(whoami))
+    let customer_authenticated = Router::new()
+        .route("/check/customer", get(|| async {}))
         .layer(from_fn_with_state(
             state.clone(),
-            session_middleware::<AuthenticatedSession>,
-        ))
-        .nest("/2fa", mfa_router)
-        .route("/", get(root))
-        .route("/methods", get(list_methods))
-        .route("/login", post(login))
+            session_middleware::<CustomerSession>,
+        ));
+    let admin_authenticated =
+        Router::new()
+            .route("/check/admin", get(|| async {}))
+            .layer(from_fn_with_state(
+                state.clone(),
+                session_middleware::<AdministratorSession>,
+            ));
+    unauthenticated
+        .merge(pre_authenticated)
+        .merge(customer_authenticated)
+        .merge(admin_authenticated)
 }
 
 /// Simply returns a happy message :)
@@ -106,19 +120,6 @@ async fn login(
             is_admin,
         }),
     ))
-}
-
-#[derive(Serialize)]
-/// A response to /auth/whoami
-struct WhoamiResponse {
-    /// The requesting user's ID.
-    user_id: u32,
-}
-/// Get the currently authenticated user.
-async fn whoami(Extension(session): Extension<AuthenticatedSession>) -> Json<WhoamiResponse> {
-    Json(WhoamiResponse {
-        user_id: session.user_id(),
-    })
 }
 
 #[derive(Serialize)]

@@ -55,7 +55,7 @@ pub trait SessionTrait: Send + Sync + Clone + Sized {
 /// `AuthenticatedSession::try_from_session` on a session which _was_ previously
 /// authenticated within the session store.
 #[derive(Clone)]
-pub struct AuthenticatedSession {
+pub struct CustomerSession {
     /// The inner session used to interact with the session store.
     session: BaseSession,
 }
@@ -82,12 +82,12 @@ pub struct RegistrationSession {
 /// administrative access. Note that this is mutally exclusive with
 /// having recular authenticated user access.
 #[derive(Clone)]
-pub struct AdministrativeSession {
+pub struct AdministratorSession {
     /// The inner session used to interact with the session store.
     session: BaseSession,
 }
 
-impl SessionTrait for AdministrativeSession {
+impl SessionTrait for AdministratorSession {
     async fn get(
         token: &str,
         session_store_conn: &mut store::Connection,
@@ -113,7 +113,7 @@ impl SessionTrait for AdministrativeSession {
     }
 }
 
-impl AdministrativeSession {
+impl AdministratorSession {
     /// Get the user ID of the admin identified by this session.
     pub fn user_id(&self) -> u32 {
         self.session
@@ -123,7 +123,7 @@ impl AdministrativeSession {
     }
 }
 
-impl SessionTrait for AuthenticatedSession {
+impl SessionTrait for CustomerSession {
     async fn get(
         token: &str,
         session_store_conn: &mut store::Connection,
@@ -147,7 +147,7 @@ impl SessionTrait for AuthenticatedSession {
     }
 }
 
-impl AuthenticatedSession {
+impl CustomerSession {
     /// Get the ID of the user authenticated by this session.
     pub fn user_id(&self) -> u32 {
         self.session
@@ -179,7 +179,7 @@ impl PreAuthenticationSession {
     pub async fn promote(
         self,
         session_store_conn: &mut store::Connection,
-    ) -> Result<AuthenticatedSession, errors::SessionStorageError> {
+    ) -> Result<CustomerSession, errors::SessionStorageError> {
         session_store_conn
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
@@ -195,7 +195,7 @@ impl PreAuthenticationSession {
         session
             .set_expiry(SESSION_TIMEOUT, session_store_conn)
             .await?;
-        Ok(AuthenticatedSession { session })
+        Ok(CustomerSession { session })
     }
 
     /// Promote this session to an administrative session. Should ONLY be done
@@ -203,7 +203,7 @@ impl PreAuthenticationSession {
     pub async fn promote_to_admin(
         self,
         session_store_conn: &mut store::Connection,
-    ) -> Result<AdministrativeSession, errors::SessionStorageError> {
+    ) -> Result<AdministratorSession, errors::SessionStorageError> {
         session_store_conn
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
@@ -219,7 +219,7 @@ impl PreAuthenticationSession {
         session
             .set_expiry(ADMIN_SESSION_TIMEOUT, session_store_conn)
             .await?;
-        Ok(AdministrativeSession { session })
+        Ok(AdministratorSession { session })
     }
     /// Get the user ID associated with this session.
     pub fn user_id(&self) -> u32 {
