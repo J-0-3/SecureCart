@@ -92,20 +92,23 @@ impl SessionTrait for AdministratorSession {
         token: &str,
         session_store_conn: &mut store::Connection,
     ) -> Result<Option<Self>, errors::SessionStorageError> {
-        Ok(BaseSession::get(
-            token,
-            store::SessionType::Administrative,
-            session_store_conn,
-        )
-        .await?
-        .map(|session| Self { session }))
+        Ok(BaseSession::get(token, store::SessionType::Authenticated, session_store_conn).await?.and_then(
+            |session|  {
+                session
+                    .info()
+                    .as_auth()
+                    .expect("Got non-authenticated session back from get with SessionType::Authenticated. Major bug in session store.")
+                    .1
+                    .then_some(Self { session })
+            }
+        ))
     }
     async fn delete(
         self,
         session_store_conn: &mut store::Connection,
     ) -> Result<(), errors::SessionStorageError> {
         session_store_conn
-            .delete(&self.token(), store::SessionType::Administrative)
+            .delete(&self.token(), store::SessionType::Authenticated)
             .await
     }
     fn token(&self) -> String {
@@ -120,6 +123,7 @@ impl AdministratorSession {
             .info()
             .as_auth()
             .expect("Tried to convert a registration session to an authentication session")
+            .0
     }
 }
 
@@ -154,6 +158,7 @@ impl CustomerSession {
             .info()
             .as_auth()
             .expect("Attempted to convert a registration session to an authentication session.")
+            .0
     }
 }
 
@@ -185,9 +190,10 @@ impl PreAuthenticationSession {
             .await?;
         let session = BaseSession::create(
             SessionInfo::Authenticated {
-                user_id: self.session.info().as_auth().expect(
-                    "Attempted to promote a registration session to an authenticated session.",
+                user_id: self.session.info().as_pre_auth().expect(
+                    "Attempted to promote a non-preauthentication session to an authenticated session.",
                 ),
+                admin: false,
             },
             session_store_conn,
         )
@@ -208,10 +214,11 @@ impl PreAuthenticationSession {
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
         let session = BaseSession::create(
-            SessionInfo::Administrative {
-                user_id: self.session.info().as_auth().expect(
-                    "Attempted to promote a registration session to an administrative session.",
+            SessionInfo::Authenticated {
+                user_id: self.session.info().as_pre_auth().expect(
+                    "Attempted to promote non-preauthentication registration session to an administrative session.",
                 ),
+                admin: true
             },
             session_store_conn,
         )
@@ -225,7 +232,7 @@ impl PreAuthenticationSession {
     pub fn user_id(&self) -> u32 {
         self.session
             .info()
-            .as_auth()
+            .as_pre_auth()
             .expect("Attempted to convert a registration session to a preauth session.")
     }
 }
