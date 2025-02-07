@@ -60,8 +60,8 @@ impl ProductInsert {
 
 impl Product {
     /// Select a `Product` from the database by its ID.
-    pub async fn select_one(id: i64, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(Self, "SELECT * FROM product WHERE id = $1", id)
+    pub async fn select_one(id: u32, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
+        Ok(query_as!(Self, "SELECT * FROM product WHERE id = $1", i64::from(id))
             .fetch_optional(db_client)
             .await?)
     }
@@ -86,8 +86,8 @@ impl Product {
         u32::try_from(self.price).expect("Price value in database is out of allowed range")
     }
     /// Get this product's ID primary key.
-    pub const fn id(&self) -> i64 {
-        self.id
+    pub fn id(&self) -> u32 {
+        u32::try_from(self.id).expect("Product ID in database out of allowed range")
     }
     /// Update the corresponding database record to match this model's state.
     pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
@@ -103,5 +103,9 @@ impl Product {
             .execute(db_client)
             .await
             .map(|_| ())?)
+    }
+
+    pub fn set_name(&mut self, name: &str) {
+        self.name = name.to_owned();
     }
 }
