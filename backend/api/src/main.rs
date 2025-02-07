@@ -15,7 +15,7 @@ use tokio::net::TcpListener;
 async fn main() {
     let db_conn = db::connect()
         .await
-        .expect("Could not connect to primary databasee");
+        .expect("Could not connect to primary database");
     let session_store_conn = services::sessions::store::Connection::connect()
         .await
         .expect("Could not connect to session store");

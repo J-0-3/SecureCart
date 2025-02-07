@@ -4,7 +4,10 @@ use crate::{
     services::{
         auth,
         errors::StorageError,
-        sessions::{self, AuthenticatedSession, PreAuthenticationSession, SessionTrait as _},
+        sessions::{
+            self, AdministratorSession, CustomerSession, PreAuthenticationSession,
+            SessionTrait as _,
+        },
     },
     state::AppState,
 };
@@ -20,23 +23,34 @@ use serde::{Deserialize, Serialize};
 
 /// Create a router for the /auth route.
 pub fn create_router(state: &AppState) -> Router<AppState> {
-    let mfa_router = Router::new()
-        .route("/", get(get_mfa_methods))
-        .route("/", post(authenticate_2fa))
+    let unauthenticated = Router::new()
+        .route("/", get(root))
+        .route("/methods", get(list_methods))
+        .route("/login", post(login));
+    let pre_authenticated = Router::new()
+        .route("/2fa/methods", get(get_mfa_methods))
+        .route("/2fa", post(authenticate_2fa))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<PreAuthenticationSession>,
         ));
-    Router::new()
-        .route("/whoami", get(whoami))
+    let customer_authenticated = Router::new()
+        .route("/check/customer", get(|| async {}))
         .layer(from_fn_with_state(
             state.clone(),
-            session_middleware::<AuthenticatedSession>,
-        ))
-        .nest("/2fa", mfa_router)
-        .route("/", get(root))
-        .route("/methods", get(list_methods))
-        .route("/login", post(login))
+            session_middleware::<CustomerSession>,
+        ));
+    let admin_authenticated =
+        Router::new()
+            .route("/check/admin", get(|| async {}))
+            .layer(from_fn_with_state(
+                state.clone(),
+                session_middleware::<AdministratorSession>,
+            ));
+    unauthenticated
+        .merge(pre_authenticated)
+        .merge(customer_authenticated)
+        .merge(admin_authenticated)
 }
 
 /// Simply returns a happy message :)
@@ -71,6 +85,8 @@ struct AuthenticateRequest {
 struct AuthenticateResponse {
     /// Whether further authentication is required.
     pub mfa_required: bool,
+    /// Whether the session is administrative, None if MFA is required.
+    pub is_admin: Option<bool>,
 }
 
 async fn login(
@@ -86,31 +102,24 @@ async fn login(
         &mut session_store,
     )
     .await?;
-    let (mfa_required, token) = match outcome {
+    let (mfa_required, is_admin, token) = match outcome {
         auth::AuthenticationOutcome::Failure => {
             eprintln!("Failed authentication as {}", body.email);
             return Err(StatusCode::UNAUTHORIZED);
         }
-        auth::AuthenticationOutcome::Success(session) => (false, session.token()),
-        auth::AuthenticationOutcome::Partial(session) => (true, session.token()),
+        auth::AuthenticationOutcome::SuccessAdministrative(session) => {
+            (false, Some(true), session.token())
+        }
+        auth::AuthenticationOutcome::Success(session) => (false, Some(false), session.token()),
+        auth::AuthenticationOutcome::Partial(session) => (true, None, session.token()),
     };
     Ok((
         cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
-        Json(AuthenticateResponse { mfa_required }),
+        Json(AuthenticateResponse {
+            mfa_required,
+            is_admin,
+        }),
     ))
-}
-
-#[derive(Serialize)]
-/// A response to /auth/whoami
-struct WhoamiResponse {
-    /// The requesting user's ID.
-    user_id: u32,
-}
-/// Get the currently authenticated user.
-async fn whoami(Extension(session): Extension<AuthenticatedSession>) -> Json<WhoamiResponse> {
-    Json(WhoamiResponse {
-        user_id: session.user_id(),
-    })
 }
 
 #[derive(Serialize)]
@@ -137,23 +146,34 @@ struct MfaAuthenticateRequest {
     credential: auth::MfaAuthenticationMethod,
 }
 
+#[derive(Serialize)]
+struct MfaAuthenticateResponse {
+    /// Whether the new session is administrative.
+    is_admin: bool,
+}
+
 /// Authenticate using an MFA method.
 async fn authenticate_2fa(
     cookies: CookieJar,
     State(state): State<AppState>,
     Extension(session): Extension<PreAuthenticationSession>,
     Json(body): Json<MfaAuthenticateRequest>,
-) -> Result<CookieJar, StatusCode> {
+) -> Result<(CookieJar, Json<MfaAuthenticateResponse>), StatusCode> {
     let mut session_store = state.session_store_conn.clone();
-    let user_id = session.user_id();
-    let authenticated_session =
+    let outcome =
         auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
-            .await?
-            .ok_or_else(|| {
-                eprintln!("Failed MFA authentication for user {user_id}.");
-                StatusCode::UNAUTHORIZED
-            })?;
-    Ok(cookies.add(Cookie::build(("SESSION", authenticated_session.token())).http_only(true)))
+            .await?;
+    match outcome {
+        auth::AuthenticationOutcome2fa::Failure => Err(StatusCode::UNAUTHORIZED),
+        auth::AuthenticationOutcome2fa::Success(new_session) => Ok((
+            cookies.add(Cookie::build(("SESSION", new_session.token())).http_only(true)),
+            Json(MfaAuthenticateResponse { is_admin: false }),
+        )),
+        auth::AuthenticationOutcome2fa::SuccessAdministrative(new_session) => Ok((
+            cookies.add(Cookie::build(("SESSION", new_session.token())).http_only(true)),
+            Json(MfaAuthenticateResponse { is_admin: true }),
+        )),
+    }
 }
 
 impl From<StorageError> for StatusCode {

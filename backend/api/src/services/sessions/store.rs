@@ -15,7 +15,7 @@ pub struct Connection(MultiplexedConnection);
 pub enum SessionType {
     /// A session used for authentication which is not yet complete.
     PreAuthentication,
-    /// An authenticated user session.
+    /// An authenticated session.
     Authenticated,
     /// A sesssion used for onboarding.
     Registration,
@@ -33,6 +33,8 @@ pub enum SessionInfo {
     Authenticated {
         /// The ID of the user authenticated by this token.
         user_id: u32,
+        /// Whether this session grants admin authorisation.
+        admin: bool,
     },
     /// Information stored with a Registration session token.
     Registration {
@@ -56,10 +58,19 @@ impl SessionType {
 impl SessionInfo {
     /// Extract authentication data (user ID) from this session, and return an error if it is a
     /// `RegistrationSession`.
-    pub const fn as_auth(&self) -> Result<u32, ()> {
+    pub const fn as_pre_auth(&self) -> Result<u32, ()> {
         match *self {
-            Self::Registration { .. } => Err(()),
-            Self::PreAuthentication { user_id } | Self::Authenticated { user_id } => Ok(user_id),
+            Self::PreAuthentication { user_id } => Ok(user_id),
+            Self::Registration { .. } | Self::Authenticated { .. } => Err(()),
+        }
+    }
+
+    /// Extract authenticated data (user ID, is admin) from this session, and return
+    /// an error if it is not an authenticated session.
+    pub const fn as_auth(&self) -> Result<(u32, bool), ()> {
+        match *self {
+            Self::Authenticated { user_id, admin } => Ok((user_id, admin)),
+            Self::PreAuthentication { .. } | Self::Registration { .. } => Err(()),
         }
     }
 
@@ -118,7 +129,24 @@ impl Connection {
     }
     /// Store data for a regular (authenticated/preauthentication) session
     /// in the store.
-    async fn store_session_data(
+    async fn store_authenticated_data(
+        &mut self,
+        key: &str,
+        user_id: u32,
+        admin: bool,
+    ) -> Result<(), errors::SessionCreationError> {
+        let _: () = self.0.hset_nx(key, "user_id", user_id).await?;
+        let set_user_id: u32 = self.0.hget(key, "user_id").await?;
+        if set_user_id == user_id {
+            let _: () = self.0.hset(key, "admin", admin).await?;
+            Ok(())
+        } else {
+            Err(errors::SessionCreationError::Duplicate)
+        }
+    }
+
+    /// Read a `SessionInfo::PreAuthentication` from the store with a given hash key.
+    async fn store_preauthentication_data(
         &mut self,
         key: &str,
         user_id: u32,
@@ -131,12 +159,13 @@ impl Connection {
             Err(errors::SessionCreationError::Duplicate)
         }
     }
+
     /// Get registration user data stored in the session store for a given
     /// session.
-    async fn get_registration_data(
+    async fn get_registration_session_data(
         &mut self,
         key: &str,
-    ) -> Result<Option<AppUserInsert>, errors::SessionStorageError> {
+    ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
         let email_opt: Option<String> = self.0.hget(key, "email").await?;
         let Some(email) = email_opt else {
             return Ok(None);
@@ -144,24 +173,37 @@ impl Connection {
         let forename: String = self.0.hget(key, "forename").await?;
         let surname: String = self.0.hget(key, "surname").await?;
         let age = self.0.hget(key, "age").await?;
-        Ok(Some(AppUserInsert::new(
-            email
-                .try_into()
-                .expect("Solar bit flip or act of God made email address invalid."),
-            &forename,
-            &surname,
-            age,
-        )))
+        Ok(Some(SessionInfo::Registration {
+            user_data: AppUserInsert::new(
+                email
+                    .try_into()
+                    .expect("Solar bit flip or act of God made email address invalid."),
+                &forename,
+                &surname,
+                age,
+            ),
+        }))
     }
 
-    /// Get the user ID associated with a session (will return a `SessionStorageError`
-    /// if the session doesn't have a `user_id` value, which will occur only if
-    /// this session is not a `PreAuthentication` or ``Authenticated`` session.)
-    async fn get_session_user_id(
+    /// Read a `SessionInfo::Authenticated` from the session store with a given hash key.
+    async fn get_authenticated_session_info(
         &mut self,
         key: &str,
-    ) -> Result<Option<u32>, errors::SessionStorageError> {
-        Ok(self.0.hget(key, "user_id").await?)
+    ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
+        let maybe_user_id: Option<u32> = self.0.hget(key, "user_id").await?;
+        let maybe_admin: Option<bool> = self.0.hget(key, "admin").await?;
+        Ok(maybe_user_id.and_then(|user_id| {
+            maybe_admin.map(|admin| SessionInfo::Authenticated { user_id, admin })
+        }))
+    }
+
+    /// Read a `SessionInfo::PreAuthentication` from the session store with a given hash key.
+    async fn get_preauthenticated_session_info(
+        &mut self,
+        key: &str,
+    ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
+        let user_id: Option<u32> = self.0.hget(key, "user_id").await?;
+        Ok(user_id.map(|id| SessionInfo::PreAuthentication { user_id: id }))
     }
 
     /// Create a new session with a given token in the session store.
@@ -181,8 +223,11 @@ impl Connection {
             SessionInfo::Registration { user_data } => {
                 self.store_registration_data(&key, user_data).await
             }
-            SessionInfo::PreAuthentication { user_id } | SessionInfo::Authenticated { user_id } => {
-                self.store_session_data(&key, user_id).await
+            SessionInfo::PreAuthentication { user_id } => {
+                self.store_preauthentication_data(&key, user_id).await
+            }
+            SessionInfo::Authenticated { user_id, admin } => {
+                self.store_authenticated_data(&key, user_id, admin).await
             }
         }
     }
@@ -216,18 +261,9 @@ impl Connection {
     ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
         let key = format!("{}:{token}", session_type.to_parent_key_name());
         Ok(match session_type {
-            SessionType::PreAuthentication => self
-                .get_session_user_id(&key)
-                .await?
-                .map(|user_id| SessionInfo::PreAuthentication { user_id }),
-            SessionType::Authenticated => self
-                .get_session_user_id(&key)
-                .await?
-                .map(|user_id| SessionInfo::Authenticated { user_id }),
-            SessionType::Registration => self
-                .get_registration_data(&key)
-                .await?
-                .map(|user_data| SessionInfo::Registration { user_data }),
+            SessionType::PreAuthentication => self.get_preauthenticated_session_info(&key).await?,
+            SessionType::Authenticated => self.get_authenticated_session_info(&key).await?,
+            SessionType::Registration => self.get_registration_session_data(&key).await?,
         })
     }
 }

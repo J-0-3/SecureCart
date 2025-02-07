@@ -2,11 +2,17 @@
 use crate::{
     db::{
         self,
-        models::{appuser::AppUser, password::Password, totp::Totp},
+        models::{
+            appuser::{AppUser, AppUserRole},
+            password::Password,
+            totp::Totp,
+        },
     },
-    services::sessions::{self, AuthenticatedSession, PreAuthenticationSession},
+    services::sessions::{self, CustomerSession, PreAuthenticationSession},
 };
 use serde::{Deserialize, Serialize};
+
+use super::sessions::AdministratorSession;
 
 #[derive(Serialize, Deserialize)]
 /// A method used for the primary authentication for a user.
@@ -63,12 +69,14 @@ pub fn list_supported_authentication_methods() -> Vec<PrimaryAuthenticationMetho
 /// The outcome of an authentication attempt.
 pub enum AuthenticationOutcome {
     /// The authentication was successful, and an ``AuthenticatedSession`` was created.
-    Success(AuthenticatedSession),
+    Success(CustomerSession),
     /// The authentication was succesful, but further authentication is required. A
     /// ``PreAuthenticationSession`` was created.
     Partial(PreAuthenticationSession),
     /// The authentication was unsuccessful.
     Failure,
+    /// The authentication was successful, and an ``AdministrativeSession`` was created.
+    SuccessAdministrative(AdministratorSession),
 }
 /// Authenticate with a primary authentication method, and return a session
 /// if successful. The session is not guaranteed to be fully authenticated,
@@ -91,9 +99,14 @@ pub async fn authenticate(
     let user_id = user.id();
     let session = PreAuthenticationSession::create(user_id, session_store_conn).await?;
     if Totp::select(user_id, db_conn).await?.is_none() {
-        Ok(AuthenticationOutcome::Success(
-            session.promote(session_store_conn).await?,
-        ))
+        match user.role {
+            AppUserRole::Customer => Ok(AuthenticationOutcome::Success(
+                session.promote(session_store_conn).await?,
+            )),
+            AppUserRole::Administrator => Ok(AuthenticationOutcome::SuccessAdministrative(
+                session.promote_to_admin(session_store_conn).await?,
+            )),
+        }
     } else {
         Ok(AuthenticationOutcome::Partial(session))
     }
@@ -128,17 +141,37 @@ async fn validate_2fa(
     }
 }
 
+/// Outcome of a 2-factor authentication attempt.
+pub enum AuthenticationOutcome2fa {
+    /// The authentication was successful, an `AuthenticatedSession` was created.
+    Success(CustomerSession),
+    /// The authentication was successful, an `AdministrativeSession` was created.
+    SuccessAdministrative(AdministratorSession),
+    /// The authentication was unsuccessful.
+    Failure,
+}
+
 /// Authenticate a partially authenticated user using an MFA method.
 pub async fn authenticate_2fa(
     session: PreAuthenticationSession,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
-) -> Result<Option<AuthenticatedSession>, super::errors::StorageError> {
+) -> Result<AuthenticationOutcome2fa, super::errors::StorageError> {
+    let user = AppUser::select_one(session.user_id(), db_conn)
+        .await?
+        .expect("User was deleting while authenticating session. Bailing.");
     if validate_2fa(session.user_id(), method, db_conn).await? {
-        Ok(Some(session.promote(session_store_conn).await?))
+        match user.role {
+            AppUserRole::Customer => Ok(AuthenticationOutcome2fa::Success(
+                session.promote(session_store_conn).await?,
+            )),
+            AppUserRole::Administrator => Ok(AuthenticationOutcome2fa::SuccessAdministrative(
+                session.promote_to_admin(session_store_conn).await?,
+            )),
+        }
     } else {
-        Ok(None)
+        Ok(AuthenticationOutcome2fa::Failure)
     }
 }
 

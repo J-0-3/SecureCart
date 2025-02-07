@@ -1,5 +1,6 @@
 //! Models mapping to the appuser database table. Represents a user and their
 //! associated information.
+#![expect(clippy::pattern_type_mismatch, reason = "SQLx enum bug")]
 use crate::{
     db::{errors::DatabaseError, ConnectionPool},
     utils::email::EmailAddress,
@@ -20,6 +21,15 @@ pub struct AppUserInsert {
     age: i16,
 }
 
+#[derive(sqlx::Type)]
+#[sqlx(type_name = "app_user_role")]
+pub enum AppUserRole {
+    /// A regular customer, able to purchase items.
+    Customer,
+    /// An administrator, able to modify items.
+    Administrator,
+}
+
 /// An `AppUser` which is stored in the database. Can only be constructed by
 /// reading it from the database.
 pub struct AppUser {
@@ -33,6 +43,8 @@ pub struct AppUser {
     pub surname: String,
     /// The user's age.
     age: i16,
+    /// The user's role (customer or admin).
+    pub role: AppUserRole,
 }
 
 impl AppUserInsert {
@@ -52,14 +64,20 @@ impl AppUserInsert {
     }
 
     /// Store this INSERT model in the database and return a complete `AppUser` model.
-    pub async fn store(self, db_client: &ConnectionPool) -> Result<AppUser, DatabaseError> {
+    pub async fn store(
+        self,
+        role: AppUserRole,
+        db_client: &ConnectionPool,
+    ) -> Result<AppUser, DatabaseError> {
+        #[expect(clippy::as_conversions, reason="Used in query_as! macro for Postgres coersion")]
         Ok(query_as!(
             AppUser,
-            "INSERT INTO appuser (email, forename, surname, age) VALUES ($1, $2, $3, $4) RETURNING *",
+            r#"INSERT INTO appuser (email, forename, surname, age, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, forename, surname, age, role AS "role!: AppUserRole""#,
             self.email,
             self.forename,
             self.surname,
-            self.age
+            self.age,
+            role as AppUserRole
         ).fetch_one(db_client).await?)
     }
 
@@ -92,10 +110,10 @@ impl AppUser {
     }
     /// Select an `AppUser` from the database by ID.
     pub async fn select_one(
-        id: i64,
+        id: u32,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(Self, "SELECT * FROM appuser WHERE id = $1", &id)
+        Ok(query_as!(Self, r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser WHERE id = $1"#, i64::from(id))
             .fetch_optional(db_client)
             .await?)
     }
@@ -105,16 +123,19 @@ impl AppUser {
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
         Ok(
-            query_as!(Self, "SELECT * FROM appuser WHERE email = $1", email)
+            query_as!(Self, r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser WHERE email = $1"#, email)
                 .fetch_optional(db_client)
                 .await?,
         )
     }
     /// Retrieve all `AppUser` records in the database.
     pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
-        Ok(query_as!(Self, "SELECT * FROM appuser")
-            .fetch_all(db_client)
-            .await?)
+        Ok(query_as!(
+            Self,
+            r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser"#
+        )
+        .fetch_all(db_client)
+        .await?)
     }
     /// Update the database record to match the model's current state.
     pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {

@@ -4,7 +4,7 @@ use crate::{
     db::{
         self,
         models::{
-            appuser::{AppUser, AppUserInsert},
+            appuser::{AppUser, AppUserInsert, AppUserRole},
             password::PasswordInsert,
         },
     },
@@ -51,7 +51,7 @@ pub async fn signup_add_credential_and_commit(
     session_store_conn: &mut sessions::store::Connection,
 ) -> Result<(), errors::StorageError> {
     let user_data = registration_session.user_data();
-    let stored_user = user_data.store(db_conn).await?;
+    let stored_user = user_data.store(AppUserRole::Customer, db_conn).await?;
     match credential {
         PrimaryAuthenticationMethod::Password { password } => {
             let password_model = PasswordInsert::new(stored_user.id(), &password);

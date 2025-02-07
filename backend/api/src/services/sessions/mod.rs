@@ -1,6 +1,9 @@
 //! Logic for session handling. Creating, managing and revoking session tokens.
 use crate::{
-    constants::sessions::{PREAUTH_SESSION_TIMEOUT, REGISTRATION_SESSION_TIMEOUT, SESSION_TIMEOUT},
+    constants::sessions::{
+        ADMIN_SESSION_TIMEOUT, PREAUTH_SESSION_TIMEOUT, REGISTRATION_SESSION_TIMEOUT,
+        SESSION_TIMEOUT,
+    },
     db::models::appuser::AppUserInsert,
 };
 pub mod store;
@@ -52,7 +55,7 @@ pub trait SessionTrait: Send + Sync + Clone + Sized {
 /// `AuthenticatedSession::try_from_session` on a session which _was_ previously
 /// authenticated within the session store.
 #[derive(Clone)]
-pub struct AuthenticatedSession {
+pub struct CustomerSession {
     /// The inner session used to interact with the session store.
     session: BaseSession,
 }
@@ -75,7 +78,56 @@ pub struct RegistrationSession {
     session: BaseSession,
 }
 
-impl SessionTrait for AuthenticatedSession {
+/// A session which has been fully authenticated and authorized to have
+/// administrative access. Note that this is mutally exclusive with
+/// having recular authenticated user access.
+#[derive(Clone)]
+pub struct AdministratorSession {
+    /// The inner session used to interact with the session store.
+    session: BaseSession,
+}
+
+impl SessionTrait for AdministratorSession {
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError> {
+        Ok(BaseSession::get(token, store::SessionType::Authenticated, session_store_conn).await?.and_then(
+            |session|  {
+                session
+                    .info()
+                    .as_auth()
+                    .expect("Got non-authenticated session back from get with SessionType::Authenticated. Major bug in session store.")
+                    .1
+                    .then_some(Self { session })
+            }
+        ))
+    }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Authenticated)
+            .await
+    }
+    fn token(&self) -> String {
+        self.session.token.clone()
+    }
+}
+
+impl AdministratorSession {
+    /// Get the user ID of the admin identified by this session.
+    pub fn user_id(&self) -> u32 {
+        self.session
+            .info()
+            .as_auth()
+            .expect("Tried to convert a registration session to an authentication session")
+            .0
+    }
+}
+
+impl SessionTrait for CustomerSession {
     async fn get(
         token: &str,
         session_store_conn: &mut store::Connection,
@@ -99,13 +151,14 @@ impl SessionTrait for AuthenticatedSession {
     }
 }
 
-impl AuthenticatedSession {
+impl CustomerSession {
     /// Get the ID of the user authenticated by this session.
     pub fn user_id(&self) -> u32 {
         self.session
             .info()
             .as_auth()
             .expect("Attempted to convert a registration session to an authentication session.")
+            .0
     }
 }
 
@@ -131,15 +184,16 @@ impl PreAuthenticationSession {
     pub async fn promote(
         self,
         session_store_conn: &mut store::Connection,
-    ) -> Result<AuthenticatedSession, errors::SessionStorageError> {
+    ) -> Result<CustomerSession, errors::SessionStorageError> {
         session_store_conn
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
         let session = BaseSession::create(
             SessionInfo::Authenticated {
-                user_id: self.session.info().as_auth().expect(
-                    "Attempted to promote a registration session to an authenticated session.",
+                user_id: self.session.info().as_pre_auth().expect(
+                    "Attempted to promote a non-preauthentication session to an authenticated session.",
                 ),
+                admin: false,
             },
             session_store_conn,
         )
@@ -147,13 +201,38 @@ impl PreAuthenticationSession {
         session
             .set_expiry(SESSION_TIMEOUT, session_store_conn)
             .await?;
-        Ok(AuthenticatedSession { session })
+        Ok(CustomerSession { session })
+    }
+
+    /// Promote this session to an administrative session. Should ONLY be done
+    /// if you have already verified that the user has admin authorization.
+    pub async fn promote_to_admin(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<AdministratorSession, errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.session.token, store::SessionType::PreAuthentication)
+            .await?;
+        let session = BaseSession::create(
+            SessionInfo::Authenticated {
+                user_id: self.session.info().as_pre_auth().expect(
+                    "Attempted to promote non-preauthentication registration session to an administrative session.",
+                ),
+                admin: true
+            },
+            session_store_conn,
+        )
+        .await?;
+        session
+            .set_expiry(ADMIN_SESSION_TIMEOUT, session_store_conn)
+            .await?;
+        Ok(AdministratorSession { session })
     }
     /// Get the user ID associated with this session.
     pub fn user_id(&self) -> u32 {
         self.session
             .info()
-            .as_auth()
+            .as_pre_auth()
             .expect("Attempted to convert a registration session to a preauth session.")
     }
 }
