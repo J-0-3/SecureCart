@@ -87,6 +87,49 @@ pub struct AdministratorSession {
     session: BaseSession,
 }
 
+/// A generic authenticated session, which may either be a customer
+/// or administrator session.
+#[derive(Clone)]
+pub enum GenericAuthenticatedSession {
+    /// A customer session.
+    Customer(CustomerSession),
+    /// An administrator session.
+    Administrator(AdministratorSession),
+}
+
+impl SessionTrait for GenericAuthenticatedSession {
+    async fn get(
+        token: &str,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<Option<Self>, errors::SessionStorageError> {
+        let session_opt =
+            BaseSession::get(token, store::SessionType::Authenticated, session_store_conn).await?;
+        Ok(session_opt.map(|session| {
+            let (_, is_admin) = session.info().as_auth().expect(
+                "Requested authenticated session, got something else. Bug/Redis is corrupted.",
+            );
+            if is_admin {
+                Self::Administrator(AdministratorSession { session })
+            } else {
+                Self::Customer(CustomerSession { session })
+            }
+        }))
+    }
+    fn token(&self) -> String {
+        let (Self::Customer(CustomerSession { ref session })
+        | Self::Administrator(AdministratorSession { ref session })) = *self;
+        session.token.clone()
+    }
+    async fn delete(
+        self,
+        session_store_conn: &mut store::Connection,
+    ) -> Result<(), errors::SessionStorageError> {
+        session_store_conn
+            .delete(&self.token(), store::SessionType::Authenticated)
+            .await
+    }
+}
+
 impl SessionTrait for AdministratorSession {
     async fn get(
         token: &str,
