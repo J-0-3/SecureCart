@@ -1,8 +1,11 @@
+use serde::Deserialize;
+
 use crate::db::{
     self,
     models::product::{Product, ProductInsert},
 };
 
+#[derive(Deserialize)]
 pub struct ProductSearchParameters {
     name: Option<String>,
     price_min: Option<u32>,
@@ -42,6 +45,13 @@ pub async fn retrieve_product(
     Product::select_one(id, db_conn).await
 }
 
+pub async fn retrieve_listed_products(
+    db_conn: &db::ConnectionPool,
+) -> Result<Vec<Product>, db::errors::DatabaseError> {
+    Product::select_all(db_conn).await
+}
+
+#[derive(Deserialize)]
 pub struct ProductUpdate {
     name: Option<String>,
     price: Option<u32>,

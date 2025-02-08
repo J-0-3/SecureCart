@@ -1,9 +1,11 @@
 //! Models mapping to the product database table. Represents a purchaseable
 //! product in the store.
+use serde::{Deserialize, Serialize};
 use sqlx::{query, query_as};
 use crate::db::{ConnectionPool, errors::DatabaseError};
 
 /// INSERT model for a `product`. Used ONLY when adding a new product.
+#[derive(Deserialize)]
 pub struct ProductInsert {
     /// The name of the product.
     pub name: String,
@@ -17,6 +19,7 @@ pub struct ProductInsert {
 
 /// A `Product` which is stored in the database. Can only be constructed by
 /// reading it from the database.
+#[derive(Serialize)]
 pub struct Product {
     /// The product's ID primary key.
     id: i64,
@@ -106,6 +109,6 @@ impl Product {
     }
 
     pub fn set_name(&mut self, name: &str) {
-        self.name = name.to_owned();
+        name.clone_into(&mut self.name);
     }
 }
