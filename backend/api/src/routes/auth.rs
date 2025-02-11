@@ -18,7 +18,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use axum_extra::extract::{cookie::Cookie, CookieJar};
+use axum_extra::extract::{
+    cookie::{Cookie, SameSite},
+    CookieJar,
+};
 use serde::{Deserialize, Serialize};
 
 /// Create a router for the /auth route.
@@ -114,7 +117,13 @@ async fn login(
         auth::AuthenticationOutcome::Partial(session) => (true, None, session.token()),
     };
     Ok((
-        cookies.add(Cookie::build(("SESSION", token)).http_only(true)),
+        cookies.add(
+            Cookie::build(("SESSION", token))
+                .http_only(true)
+                .path("/")
+                .secure(true)
+                .same_site(SameSite::Strict),
+        ),
         Json(AuthenticateResponse {
             mfa_required,
             is_admin,
@@ -166,11 +175,23 @@ async fn authenticate_2fa(
     match outcome {
         auth::AuthenticationOutcome2fa::Failure => Err(StatusCode::UNAUTHORIZED),
         auth::AuthenticationOutcome2fa::Success(new_session) => Ok((
-            cookies.add(Cookie::build(("SESSION", new_session.token())).http_only(true)),
+            cookies.add(
+                Cookie::build(("SESSION", new_session.token()))
+                    .http_only(true)
+                    .path("/")
+                    .secure(true)
+                    .same_site(SameSite::Strict),
+            ),
             Json(MfaAuthenticateResponse { is_admin: false }),
         )),
         auth::AuthenticationOutcome2fa::SuccessAdministrative(new_session) => Ok((
-            cookies.add(Cookie::build(("SESSION", new_session.token())).http_only(true)),
+            cookies.add(
+                Cookie::build(("SESSION", new_session.token()))
+                    .http_only(true)
+                    .path("/")
+                    .secure(true)
+                    .same_site(SameSite::Strict),
+            ),
             Json(MfaAuthenticateResponse { is_admin: true }),
         )),
     }
