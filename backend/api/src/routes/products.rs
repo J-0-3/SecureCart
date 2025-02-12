@@ -12,20 +12,20 @@ use crate::{
     middleware::auth::session_middleware,
     services::{
         products::{self, ProductSearchParameters, ProductUpdate},
-        sessions::{AdministratorSession, CustomerSession},
+        sessions::{AdministratorSession, GenericAuthenticatedSession},
     },
     state::AppState,
 };
 
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let unauthenticated = Router::new().route("/", get(root));
-    let customer_authenticated = Router::new()
+    let authenticated = Router::new()
         .route("/all", get(list_products))
         .route("/search", get(search_products))
         .route("/{product_id}", get(get_product))
         .layer(from_fn_with_state(
             state.clone(),
-            session_middleware::<CustomerSession>,
+            session_middleware::<GenericAuthenticatedSession>,
         ));
     let admin_authenticated = Router::new()
         .route("/", post(create_product))
@@ -36,7 +36,7 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
             session_middleware::<AdministratorSession>,
         ));
     unauthenticated
-        .merge(customer_authenticated)
+        .merge(authenticated)
         .merge(admin_authenticated)
 }
 
