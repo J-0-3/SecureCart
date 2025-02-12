@@ -202,10 +202,6 @@ impl SessionTrait for CustomerSession {
 }
 
 impl CustomerSession {
-    pub const fn new(session: BaseSession) -> Self {
-        Self { session }
-    }
-
     /// Get the ID of the user authenticated by this session.
     pub fn user_id(&self) -> u32 {
         self.session

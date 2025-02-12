@@ -1,3 +1,4 @@
+//! Routes for CRUD operations on products.
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -8,7 +9,10 @@ use axum::{
 use serde::Serialize;
 
 use crate::{
-    db::models::product::{Product, ProductInsert},
+    db::{
+        errors::DatabaseError,
+        models::product::{Product, ProductInsert},
+    },
     middleware::auth::session_middleware,
     services::{
         products::{self, ProductSearchParameters, ProductUpdate},
@@ -17,6 +21,7 @@ use crate::{
     state::AppState,
 };
 
+/// Create a router for routes under the product service.
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let unauthenticated = Router::new().route("/", get(root));
     let authenticated = Router::new()
@@ -40,14 +45,19 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .merge(admin_authenticated)
 }
 
+/// Simply a healthcheck that this component is functional.
 async fn root() -> Json<String> {
     Json("Products service is running".to_owned())
 }
 
+/// The response to /products/all or /products/search.
 #[derive(Serialize)]
 struct ListProductsResponse {
+    /// The products returned by the query.
     products: Vec<Product>,
 }
+
+/// List all listed stored products.
 async fn list_products(
     State(state): State<AppState>,
 ) -> Result<Json<ListProductsResponse>, StatusCode> {
@@ -55,6 +65,7 @@ async fn list_products(
     Ok(Json(ListProductsResponse { products }))
 }
 
+/// Search for matching products.
 async fn search_products(
     State(state): State<AppState>,
     Query(params): Query<ProductSearchParameters>,
@@ -63,6 +74,7 @@ async fn search_products(
     Ok(Json(ListProductsResponse { products }))
 }
 
+/// Get a product by its ID.
 async fn get_product(
     State(state): State<AppState>,
     Path(product_id): Path<u32>,
@@ -74,6 +86,7 @@ async fn get_product(
     ))
 }
 
+/// Create a new product.
 async fn create_product(
     State(state): State<AppState>,
     Json(body): Json<ProductInsert>,
@@ -81,6 +94,7 @@ async fn create_product(
     Ok(Json(products::create_product(body, &state.db_conn).await?))
 }
 
+/// Delete a product.
 async fn delete_product(
     State(state): State<AppState>,
     Path(product_id): Path<u32>,
@@ -88,6 +102,7 @@ async fn delete_product(
     Ok(products::delete_product(product_id, &state.db_conn).await?)
 }
 
+/// Update a product.
 async fn update_product(
     State(state): State<AppState>,
     Path(product_id): Path<u32>,
@@ -96,8 +111,8 @@ async fn update_product(
     Ok(products::update_product(product_id, body, &state.db_conn).await?)
 }
 
-impl From<crate::db::errors::DatabaseError> for StatusCode {
-    fn from(_: crate::db::errors::DatabaseError) -> Self {
+impl From<DatabaseError> for StatusCode {
+    fn from(_: DatabaseError) -> Self {
         eprintln!("Database error in product handler");
         Self::INTERNAL_SERVER_ERROR
     }
