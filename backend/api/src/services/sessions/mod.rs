@@ -50,10 +50,8 @@ pub trait SessionTrait: Send + Sync + Clone + Sized {
 }
 
 /// A session which is guaranteed to have been fully authenticated. Can be
-/// constructed either infallibly by calling `Session::authenticate` on a session which
-/// was _not_ previously authenticated within the session store, or fallibly by calling
-/// `AuthenticatedSession::try_from_session` on a session which _was_ previously
-/// authenticated within the session store.
+/// constructed either infallibly using `PreAuthenticationSession::promote`,
+/// or fallibly by using `CustomerSession::get` like usual.
 #[derive(Clone)]
 pub struct CustomerSession {
     /// The inner session used to interact with the session store.
@@ -178,7 +176,16 @@ impl SessionTrait for CustomerSession {
         Ok(
             BaseSession::get(token, store::SessionType::Authenticated, session_store_conn)
                 .await?
-                .map(|session| Self { session }),
+                .and_then(|sess| {
+                    let (_, is_admin) = sess.info().as_auth().expect(
+                        "Malformed authenticated session data returned from store. Unrecoverable.",
+                    );
+                    if is_admin {
+                        None
+                    } else {
+                        Some(Self { session: sess })
+                    }
+                }),
         )
     }
     fn token(&self) -> String {
