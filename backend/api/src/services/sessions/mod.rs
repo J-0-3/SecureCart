@@ -202,7 +202,7 @@ impl SessionTrait for CustomerSession {
 }
 
 impl CustomerSession {
-    pub fn new(session: BaseSession) -> Self {
+    pub const fn new(session: BaseSession) -> Self {
         Self { session }
     }
 
