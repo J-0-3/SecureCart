@@ -56,6 +56,7 @@ pub struct ProductUpdate {
     name: Option<String>,
     price: Option<u32>,
     listed: Option<bool>,
+    description: Option<String>,
 }
 
 pub async fn update_product(
@@ -72,7 +73,16 @@ pub async fn update_product(
     if let Some(price) = product_info.price {
         product.set_price(price);
     }
-    //product_info.listed.map(|listed| product.set_listed(listed));
+    if let Some(listed) = product_info.listed {
+        if listed {
+            product.list();
+        } else {
+            product.unlist();
+        }
+    }
+    if let Some(description) = product_info.description {
+        product.set_description(&description);
+    }
     Ok(product.update(db_conn).await?)
 }
 

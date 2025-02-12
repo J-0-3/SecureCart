@@ -84,6 +84,10 @@ impl Product {
     pub fn set_price(&mut self, price: u32) {
         self.price = i64::from(price);
     }
+    /// Set the product's description.
+    pub fn set_description(&mut self, description: &str) {
+        description.clone_into(&mut self.description);
+    }
     /// Get whether this product is listed.
     pub const fn is_listed(&self) -> bool {
         self.listed
