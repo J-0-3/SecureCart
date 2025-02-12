@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     middleware::from_fn_with_state,
     routing::{delete, get, post, put},
-    Json, Router,
+    Extension, Json, Router,
 };
 use serde::Serialize;
 
@@ -15,7 +15,7 @@ use crate::{
     },
     middleware::auth::session_middleware,
     services::{
-        products::{self, ProductSearchParameters, ProductUpdate},
+        products::{self, ProductSearchParameters, ProductUpdate, ProductVisibilityScope},
         sessions::{AdministratorSession, GenericAuthenticatedSession},
     },
     state::AppState,
@@ -60,30 +60,72 @@ struct ListProductsResponse {
 /// List all listed stored products.
 async fn list_products(
     State(state): State<AppState>,
+    Extension(session): Extension<GenericAuthenticatedSession>,
 ) -> Result<Json<ListProductsResponse>, StatusCode> {
-    let products = products::retrieve_listed_products(&state.db_conn).await?;
+    let products = match session {
+        GenericAuthenticatedSession::Customer(_) => {
+            products::retrieve_products::<{ ProductVisibilityScope::LISTED_ONLY }>(&state.db_conn)
+                .await?
+        }
+        GenericAuthenticatedSession::Administrator(_) => {
+            products::retrieve_products::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(
+                &state.db_conn,
+            )
+            .await?
+        }
+    };
+
     Ok(Json(ListProductsResponse { products }))
 }
 
 /// Search for matching products.
 async fn search_products(
     State(state): State<AppState>,
+    Extension(session): Extension<GenericAuthenticatedSession>,
     Query(params): Query<ProductSearchParameters>,
 ) -> Result<Json<ListProductsResponse>, StatusCode> {
-    let products = products::search_products(&state.db_conn, &params).await?;
+    let products = match session {
+        GenericAuthenticatedSession::Customer(_) => {
+            products::search_products::<{ ProductVisibilityScope::LISTED_ONLY }>(
+                &state.db_conn,
+                &params,
+            )
+            .await?
+        }
+        GenericAuthenticatedSession::Administrator(_) => {
+            products::search_products::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(
+                &state.db_conn,
+                &params,
+            )
+            .await?
+        }
+    };
     Ok(Json(ListProductsResponse { products }))
 }
 
 /// Get a product by its ID.
 async fn get_product(
     State(state): State<AppState>,
+    Extension(session): Extension<GenericAuthenticatedSession>,
     Path(product_id): Path<u32>,
 ) -> Result<Json<Product>, StatusCode> {
-    Ok(Json(
-        products::retrieve_product(product_id, &state.db_conn)
+    let product = match session {
+        GenericAuthenticatedSession::Customer(_) => {
+            products::retrieve_product::<{ ProductVisibilityScope::LISTED_ONLY }>(
+                product_id,
+                &state.db_conn,
+            )
             .await?
-            .ok_or(StatusCode::NOT_FOUND)?,
-    ))
+        }
+        GenericAuthenticatedSession::Administrator(_) => {
+            products::retrieve_product::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(
+                product_id,
+                &state.db_conn,
+            )
+            .await?
+        }
+    };
+    Ok(Json(product.ok_or(StatusCode::NOT_FOUND)?))
 }
 
 /// Create a new product.

@@ -6,6 +6,50 @@ use crate::db::{
     models::product::{Product, ProductInsert},
 };
 
+// This is a little weird and unpleasant (implementing an enum manually),
+// but it is necessary since enums are non-const and not allowed as const
+// generic parameters. If enums become supported as const generic parameters,
+// one should immediately be used here instead.
+
+/// The type used to represent product's visibility scopes (since enums are non-const)
+type ProductVisibilityScopeT = bool;
+
+/// Possible visibility scopes for querying products.
+#[expect(non_snake_case, reason = "This is acting as a poor-man's enum")]
+pub mod ProductVisibilityScope {
+    /// Include only publically listed products.
+    pub const LISTED_ONLY: super::ProductVisibilityScopeT = false;
+    /// Include all products, whether listed or not.
+    pub const INCLUDE_UNLISTED: super::ProductVisibilityScopeT = true;
+}
+
+/// Retrieve a specific product. Generically parameterised over the visibility
+/// scope to retrieve from. `VISIBILITY_SCOPE` must *ONLY* be set to a value from
+/// `ProductVisibilityScope`, or the function's behaviour is undefined.
+pub async fn retrieve_product<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
+    id: u32,
+    db_conn: &db::ConnectionPool,
+) -> Result<Option<Product>, db::errors::DatabaseError> {
+    Ok(Product::select_one(id, db_conn).await?.filter(|prod| {
+        VISIBILITY_SCOPE == ProductVisibilityScope::INCLUDE_UNLISTED || prod.is_listed()
+    }))
+}
+
+/// List all products in the database. Generically parameterised over the visibility
+/// scope to retrieve from. `VISIBILITY_SCOPE` must *ONLY* be set to a value from
+/// `ProductVisibilityScope`, or the function's behaviour is undefined.
+pub async fn retrieve_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
+    db_conn: &db::ConnectionPool,
+) -> Result<Vec<Product>, db::errors::DatabaseError> {
+    Ok(Product::select_all(db_conn)
+        .await?
+        .into_iter()
+        .filter(|prod| {
+            VISIBILITY_SCOPE == ProductVisibilityScope::INCLUDE_UNLISTED || prod.is_listed()
+        })
+        .collect())
+}
+
 /// The parameters for a search over stored products. Any/all of the included
 /// parameters can be set.
 #[derive(Deserialize)]
@@ -18,8 +62,10 @@ pub struct ProductSearchParameters {
     price_max: Option<u32>,
 }
 
-/// Search products stored in the database.
-pub async fn search_products(
+/// Search products stored in the database. Generically parameterised over the visibility
+/// scope to retrieve from. `VISIBILITY_SCOPE` must *ONLY* be set to a value from
+/// `ProductVisibilityScope`, or the function's behaviour is undefined.
+pub async fn search_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     db_conn: &db::ConnectionPool,
     params: &ProductSearchParameters,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
@@ -28,7 +74,7 @@ pub async fn search_products(
     let search_name = params.name.clone();
     let search_price_min = params.price_min;
     let search_price_max = params.price_max;
-    for product in Product::select_all(db_conn).await? {
+    for product in retrieve_products::<VISIBILITY_SCOPE>(db_conn).await? {
         let name_match = search_name
             .as_ref()
             .is_none_or(|name| product.name.starts_with(name));
@@ -43,25 +89,6 @@ pub async fn search_products(
         }
     }
     Ok(result)
-}
-
-/// Retrieve a specific product.
-pub async fn retrieve_product(
-    id: u32,
-    db_conn: &db::ConnectionPool,
-) -> Result<Option<Product>, db::errors::DatabaseError> {
-    Product::select_one(id, db_conn).await
-}
-
-/// Retrieve only those products which are marked as listed.
-pub async fn retrieve_listed_products(
-    db_conn: &db::ConnectionPool,
-) -> Result<Vec<Product>, db::errors::DatabaseError> {
-    Ok(Product::select_all(db_conn)
-        .await?
-        .into_iter()
-        .filter(Product::is_listed)
-        .collect())
 }
 
 /// UPDATE model for a product. All fields are optional, so an empty JSON
