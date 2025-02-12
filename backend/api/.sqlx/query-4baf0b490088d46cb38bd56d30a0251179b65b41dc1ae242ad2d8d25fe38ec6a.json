@@ -1,18 +1,18 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE product SET name = $1, description = $2, stock = $3, price = $4 WHERE id = $5",
+  "query": "UPDATE product SET name = $1, description = $2, listed = $3, price = $4 WHERE id = $5",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
         "Text",
         "Text",
-        "Int8",
+        "Bool",
         "Int8",
         "Int8"
       ]
     },
     "nullable": []
   },
-  "hash": "fb04f171d23edb345081d75d701d48d671b8e8fe405dbf41d2f7b95a7b520a80"
+  "hash": "4baf0b490088d46cb38bd56d30a0251179b65b41dc1ae242ad2d8d25fe38ec6a"
 }

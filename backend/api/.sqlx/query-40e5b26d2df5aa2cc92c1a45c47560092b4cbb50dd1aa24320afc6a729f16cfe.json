@@ -20,13 +20,13 @@
       },
       {
         "ordinal": 3,
-        "name": "stock",
+        "name": "price",
         "type_info": "Int8"
       },
       {
         "ordinal": 4,
-        "name": "price",
-        "type_info": "Int8"
+        "name": "listed",
+        "type_info": "Bool"
       }
     ],
     "parameters": {

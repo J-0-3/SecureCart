@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO product (name, description, stock, price) VALUES ($1, $2, $3, $4) RETURNING *",
+  "query": "INSERT INTO product (name, description, listed, price) VALUES ($1, $2, $3, $4) RETURNING *",
   "describe": {
     "columns": [
       {
@@ -20,20 +20,20 @@
       },
       {
         "ordinal": 3,
-        "name": "stock",
+        "name": "price",
         "type_info": "Int8"
       },
       {
         "ordinal": 4,
-        "name": "price",
-        "type_info": "Int8"
+        "name": "listed",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
       "Left": [
         "Text",
         "Text",
-        "Int8",
+        "Bool",
         "Int8"
       ]
     },
@@ -45,5 +45,5 @@
       false
     ]
   },
-  "hash": "ff9267bccc515ffdbc454cc28bfd38bfbaae3ca5edc281bad9af3f660e9d9eb5"
+  "hash": "ffb46a982222864190a2b4cdc985c6f7a1d911b560571254fdf2b288f8f4e446"
 }
