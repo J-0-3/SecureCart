@@ -20,7 +20,7 @@ CREATE TABLE totp (
 );
 CREATE TABLE product (
     id BIGSERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
     description TEXT NOT NULL,
     listed BOOLEAN NOT NULL,
     price BIGINT NOT NULL CHECK (price > 0)
