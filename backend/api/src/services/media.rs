@@ -52,6 +52,8 @@ pub async fn store_image(
         .with_extension(file_type.extension())
         .to_string_lossy()
         .into_owned();
+    // object_store will upsert by default, and since we use hashes, this will implicitely
+    // dedup image storage.
     store
         .put(&Path::from(object_path.as_str()), PutPayload::from(image))
         .await

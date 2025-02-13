@@ -54,7 +54,7 @@ impl PasswordInsert {
         }
     }
     /// Store this INSERT model in the database and return a complete `Password` model.
-    pub async fn store(&self, db_client: &ConnectionPool) -> Result<Password, DatabaseError> {
+    pub async fn store(self, db_client: &ConnectionPool) -> Result<Password, DatabaseError> {
         Ok(query_as!(
             Password,
             "INSERT INTO password (user_id, password) VALUES ($1, $2) RETURNING *",
