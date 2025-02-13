@@ -105,14 +105,9 @@ async fn login(
     State(state): State<AppState>,
     Json(body): Json<AuthenticateRequest>,
 ) -> Result<(CookieJar, Json<AuthenticateResponse>), StatusCode> {
-    let mut session_store = state.session_store_conn.clone();
-    let outcome = auth::authenticate(
-        &body.email,
-        body.credential,
-        &state.db_conn,
-        &mut session_store,
-    )
-    .await?;
+    let mut session_store = state.session_store.clone();
+    let outcome =
+        auth::authenticate(&body.email, body.credential, &state.db, &mut session_store).await?;
     let (mfa_required, is_admin, token) = match outcome {
         auth::AuthenticationOutcome::Failure => {
             eprintln!("Failed authentication as {}", body.email);
@@ -151,7 +146,7 @@ async fn get_mfa_methods(
     State(state): State<AppState>,
     Extension(session): Extension<PreAuthenticationSession>,
 ) -> Result<Json<MfaMethodsResponse>, StatusCode> {
-    let db_conn = state.db_conn;
+    let db_conn = state.db;
     let methods = auth::list_mfa_methods(session.user_id(), &db_conn).await?;
     Ok(Json(MfaMethodsResponse { methods }))
 }
@@ -176,10 +171,9 @@ async fn authenticate_2fa(
     Extension(session): Extension<PreAuthenticationSession>,
     Json(body): Json<MfaAuthenticateRequest>,
 ) -> Result<(CookieJar, Json<MfaAuthenticateResponse>), StatusCode> {
-    let mut session_store = state.session_store_conn.clone();
+    let mut session_store = state.session_store.clone();
     let outcome =
-        auth::authenticate_2fa(session, body.credential, &state.db_conn, &mut session_store)
-            .await?;
+        auth::authenticate_2fa(session, body.credential, &state.db, &mut session_store).await?;
     match outcome {
         auth::AuthenticationOutcome2fa::Failure => Err(StatusCode::UNAUTHORIZED),
         auth::AuthenticationOutcome2fa::Success(new_session) => Ok((

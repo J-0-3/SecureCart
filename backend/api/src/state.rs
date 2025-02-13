@@ -1,11 +1,16 @@
 //! Defines the state shared across the Axum application.
+use std::sync::Arc;
+
 use crate::{db, services::sessions};
+use object_store::ObjectStore;
 
 #[derive(Clone)]
 /// The state struct shared across routers.
 pub struct AppState {
     /// A database connection pool for getting new database connections.
-    pub db_conn: db::ConnectionPool,
+    pub db: db::ConnectionPool,
     /// A multiplexed connection for getting new session store connections.
-    pub session_store_conn: sessions::store::Connection,
+    pub session_store: sessions::store::Connection,
+    /// A shared connection for adding to the media store.
+    pub media_store: Arc<dyn ObjectStore>,
 }

@@ -8,6 +8,8 @@ mod services;
 mod state;
 mod utils;
 
+use std::sync::Arc;
+
 use axum::{extract::Json, routing::get};
 use object_store::aws::AmazonS3Builder;
 use tokio::net::TcpListener;
@@ -30,8 +32,9 @@ async fn main() {
         .await
         .expect("Could not connect to session store");
     let state = state::AppState {
-        db_conn,
-        session_store_conn,
+        db: db_conn,
+        session_store: session_store_conn,
+        media_store: Arc::new(s3),
     };
     let app = axum::Router::new()
         .route("/", get(root))

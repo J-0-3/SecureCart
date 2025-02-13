@@ -23,7 +23,7 @@ pub async fn session_middleware<T: SessionTrait + 'static>(
         .get("SESSION")
         .ok_or(StatusCode::UNAUTHORIZED)?
         .value();
-    let mut session_store = state.session_store_conn.clone();
+    let mut session_store = state.session_store.clone();
     let session = T::get(session_cookie, &mut session_store)
         .await
         .map_err(|err| {
