@@ -11,12 +11,14 @@ categories = ["web-programming"]
 
 [dependencies]
 argon2 = { version = "0.5.3" }
-axum = { version = "0.8.1", features = ["json", "http1", "tokio", "query"], default-features = false }
+axum = { version = "0.8.1", features = ["json", "http1", "tokio", "query", "multipart"], default-features = false }
 axum-extra = { version = "0.10.0", features = ["cookie"], default-features = false}
 getrandom = "0.3.1"
+object_store = { version = "0.11.2", features = ["aws"] }
 redis = { version = "0.28.2",  features = ["tokio-comp", "ahash", "keep-alive"], default-features = false}
 regex = { version = "1.11.1" }
 serde = { version = "1.0.217" }
+sha2 = "0.10.8"
 sqlx = { version = "0.8.3", features = ["postgres", "runtime-tokio", "time", "macros"], default-features = false }
 thiserror = "2.0.11"
 time = { version = "0.3.37", features = ["macros"], default-features = false}

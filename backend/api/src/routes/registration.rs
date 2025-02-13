@@ -51,8 +51,8 @@ async fn signup_init(
     State(state): State<AppState>,
     Json(body): Json<SignUpInitRequest>,
 ) -> Result<CookieJar, StatusCode> {
-    let mut session_store_conn = state.session_store_conn.clone();
-    let db_conn = &state.db_conn;
+    let mut session_store_conn = state.session_store.clone();
+    let db_conn = &state.db;
     let session =
         registration::signup_init(body.user_data, &mut session_store_conn, db_conn).await?;
     Ok(cookies.add(Cookie::build(("SESSION", session.token())).http_only(true)))
@@ -73,11 +73,11 @@ async fn signup_add_credential(
     Extension(session): Extension<RegistrationSession>,
     Json(body): Json<SignUpAddCredentialRequest>,
 ) -> Result<(), StatusCode> {
-    let mut session_store_conn = state.session_store_conn.clone();
+    let mut session_store_conn = state.session_store.clone();
     registration::signup_add_credential_and_commit(
         session,
         body.credential,
-        &state.db_conn,
+        &state.db,
         &mut session_store_conn,
     )
     .await?;

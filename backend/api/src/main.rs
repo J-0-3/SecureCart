@@ -8,11 +8,31 @@ mod services;
 mod state;
 mod utils;
 
+#[expect(
+    clippy::useless_attribute,
+    reason = "Lint is enabled only in clippy::restrictions"
+)]
+#[expect(
+    clippy::std_instead_of_alloc,
+    reason = "Does not work outside of no_std"
+)]
+use std::sync::Arc;
+
 use axum::{extract::Json, routing::get};
+use object_store::aws::AmazonS3Builder;
 use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() {
+    let s3 = AmazonS3Builder::new()
+        .with_endpoint(format!("http://{}:9000", &*constants::s3::S3_HOST))
+        .with_bucket_name(&*constants::s3::S3_BUCKET)
+        .with_access_key_id(&*constants::s3::S3_ACCESS_KEY)
+        .with_secret_access_key(&*constants::s3::S3_SECRET_KEY)
+        .with_allow_http(true)
+        .build()
+        .expect("Could not connect to S3-compatible object storage");
+    println!("CONNECTED TO S3: {s3}");
     let db_conn = db::connect()
         .await
         .expect("Could not connect to primary database");
@@ -20,8 +40,9 @@ async fn main() {
         .await
         .expect("Could not connect to session store");
     let state = state::AppState {
-        db_conn,
-        session_store_conn,
+        db: db_conn,
+        session_store: session_store_conn,
+        media_store: Arc::new(s3),
     };
     let app = axum::Router::new()
         .route("/", get(root))

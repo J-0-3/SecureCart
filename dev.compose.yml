@@ -26,11 +26,16 @@ services:
     build: 
       context: backend/api
     environment:
-      - DB_USERNAME=securecart
-      - DB_DATABASE=securecart
       - DB_HOST=db
-      - REDIS_HOST=redis
+      - DB_DATABASE=securecart
+      - DB_USERNAME=securecart
       - DB_PASSWORD=securecart
+      - REDIS_HOST=redis
+      - S3_HOST=minio
+      - S3_BUCKET=media
+      - S3_ACCESS_KEY=securecart
+      - S3_SECRET_KEY=securecart
+      - S3_EXTERNAL_URI=
     depends_on:
       db:
         condition: service_healthy
@@ -38,12 +43,45 @@ services:
       redis:
         condition: service_healthy
         restart: true
+      minio-setup:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/bin/healthcheck.sh"]
       interval: 30s
       retries: 5
       start_interval: 5s
       start_period: 30s
+  
+  minio:
+    build: backend/minio/main
+    ports:
+      - "127.0.0.1:9001:9001"
+    environment:
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=securecart
+    command: server --console-address ":9001" /data
+    healthcheck: 
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+
+  minio-setup:
+    build: 
+      context: backend/minio/setup
+      args:
+        - MINIO_HOST=minio
+    environment:
+      - BUCKET_NAME=media
+      - ROOT_USER=root
+      - ROOT_PASSWORD=securecart
+      - APP_USER=securecart
+      - APP_PASSWORD=securecart
+    depends_on:
+      minio:
+        condition: service_healthy
+      
 
   frontend:
     build: frontend
@@ -74,6 +112,8 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+      # minio:
+      #   condition: service_started
     develop:
       watch:
         - action: sync+restart
