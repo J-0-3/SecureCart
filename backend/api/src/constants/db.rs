@@ -32,9 +32,6 @@ pub static DB_PASSWORD: LazyLock<String> = LazyLock::new(|| {
 pub static DB_URL: LazyLock<String> = LazyLock::new(|| {
     format!(
         "postgres://{}:{}@{}/{}",
-        DB_USERNAME.clone(),
-        DB_PASSWORD.clone(),
-        DB_HOST.clone(),
-        DB_DATABASE.clone()
+        &*DB_USERNAME, &*DB_PASSWORD, &*DB_HOST, &*DB_DATABASE
     )
 });

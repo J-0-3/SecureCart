@@ -98,7 +98,7 @@ impl Connection {
     /// This connection can be cloned and is safe share between threads.
     pub async fn connect() -> Result<Self, errors::SessionStorageError> {
         Ok(Self(
-            redis::Client::open(constants::REDIS_URL.clone())?
+            redis::Client::open(constants::REDIS_URL.to_owned())?
                 .get_multiplexed_async_connection()
                 .await?,
         ))

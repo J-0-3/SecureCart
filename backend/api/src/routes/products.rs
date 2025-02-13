@@ -184,7 +184,7 @@ async fn add_product_image(
                 state.media_store,
             )
             .await?;
-            break Ok(Json(AddImageResponse { path: result.path }));
+            break Ok(Json(AddImageResponse { path: result }));
         }
     }
 }
