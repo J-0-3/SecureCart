@@ -25,6 +25,12 @@ CREATE TABLE product (
     listed BOOLEAN NOT NULL,
     price BIGINT NOT NULL CHECK (price > 0)
 );
+CREATE TABLE product_image (
+    product_id BIGINT NOT NULL,
+    path TEXT NOT NULL,
+    PRIMARY KEY(product_id, path),
+    CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product(id)
+);
 CREATE TABLE category (
     id BIGSERIAL PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,

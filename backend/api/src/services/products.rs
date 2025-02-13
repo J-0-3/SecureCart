@@ -1,10 +1,18 @@
 //! Functions for dealing with/storing/querying products.
-use serde::Deserialize;
+use std::sync::Arc;
+
+use object_store::ObjectStore;
+use serde::{Deserialize, Serialize};
 
 use crate::db::{
     self,
-    models::product::{Product, ProductInsert},
+    models::{
+        product::{Product, ProductInsert},
+        product_image::{ProductImage, ProductImageInsert},
+    },
 };
+
+use super::media;
 
 // This is a little weird and unpleasant (implementing an enum manually),
 // but it is necessary since enums are non-const and not allowed as const
@@ -134,6 +142,28 @@ pub async fn update_product(
     Ok(product.update(db_conn).await?)
 }
 
+pub async fn add_image(
+    product_id: u32,
+    image: Vec<u8>,
+    db_conn: &db::ConnectionPool,
+    media_store: Arc<dyn ObjectStore>,
+) -> Result<ProductImage, errors::AddImageError> {
+    let image_path = media::store_image(media_store, image).await?;
+    let image_insert = ProductImageInsert::new(product_id, &image_path);
+    Ok(image_insert.store(db_conn).await?)
+}
+
+pub async fn list_images(
+    product_id: u32,
+    db_conn: &db::ConnectionPool,
+) -> Result<Vec<String>, db::errors::DatabaseError> {
+    Ok(ProductImage::select_all(product_id, db_conn)
+        .await?
+        .into_iter()
+        .map(|img| img.path)
+        .collect())
+}
+
 /// Create a new product in the database.
 pub async fn create_product(
     data: ProductInsert,
@@ -156,6 +186,7 @@ pub async fn delete_product(
 /// Errors which can be returned by functions in this service.
 pub mod errors {
     use crate::db::errors::DatabaseError;
+    use crate::services::media::errors::StoreImageError;
     use thiserror::Error;
 
     /// Errors returned when updating products.
@@ -177,5 +208,12 @@ pub mod errors {
         /// Raised when the product being deleted does not exist.
         #[error("The product being deleted does not exist.")]
         NonExistent,
+    }
+    #[derive(Error, Debug)]
+    pub enum AddImageError {
+        #[error(transparent)]
+        DatabaseError(#[from] DatabaseError),
+        #[error(transparent)]
+        MediaStoreError(#[from] StoreImageError),
     }
 }
