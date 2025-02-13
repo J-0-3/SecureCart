@@ -38,6 +38,8 @@ services:
       redis:
         condition: service_healthy
         restart: true
+      minio-setup:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/bin/healthcheck.sh"]
       interval: 30s
@@ -45,10 +47,36 @@ services:
       start_interval: 5s
       start_period: 30s
   
-  # minio:
-  #   build:
-  #     context: backend/minio
+  minio:
+    build: backend/minio/main
+    ports:
+      - "127.0.0.1:9001:9001"
+    environment:
+      - MINIO_ROOT_USER=root
+      - MINIO_ROOT_PASSWORD=securecart
+    command: server --console-address ":9001" /data
+    healthcheck: 
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
 
+  minio-setup:
+    build: 
+      context: backend/minio/setup
+      args:
+        - MINIO_HOST=minio
+    environment:
+      - BUCKET_NAME=media
+      - ROOT_USER=root
+      - ROOT_PASSWORD=securecart
+      - APP_USER=securecart
+      - APP_PASSWORD=securecart
+    depends_on:
+      minio:
+        condition: service_healthy
+      
 
   frontend:
     build: frontend
