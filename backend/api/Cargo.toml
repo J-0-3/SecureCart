@@ -11,7 +11,7 @@ categories = ["web-programming"]
 
 [dependencies]
 argon2 = { version = "0.5.3" }
-axum = { version = "0.8.1", features = ["json", "http1", "tokio", "query"], default-features = false }
+axum = { version = "0.8.1", features = ["json", "http1", "tokio", "query", "multipart"], default-features = false }
 axum-extra = { version = "0.10.0", features = ["cookie"], default-features = false}
 getrandom = "0.3.1"
 object_store = { version = "0.11.2", features = ["aws"] }
