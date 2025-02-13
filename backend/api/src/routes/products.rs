@@ -148,10 +148,16 @@ async fn update_product(
     Ok(products::update_product(product_id, body, &state.db).await?)
 }
 
+/// The response to POST /products/{id}/images.
 #[derive(Serialize)]
 struct AddImageResponse {
+    /// The path where the uploaded image was stored.
     path: String,
 }
+
+/// Add an image to a given product. This, unlike most endpoints, accepts
+/// multipart form data instead of JSON. This is because that is the most
+/// natural way to do a file upload over HTTP.
 async fn add_product_image(
     State(state): State<AppState>,
     Path(product_id): Path<u32>,
@@ -190,6 +196,7 @@ async fn add_product_image(
     }
 }
 
+/// Delete (disassociate) an image from a product.
 async fn delete_product_image(
     State(state): State<AppState>,
     Path((product_id, path)): Path<(u32, String)>,
@@ -197,11 +204,14 @@ async fn delete_product_image(
     Ok(products::delete_image(product_id, &path, &state.db).await?)
 }
 
+/// The response to /product/{id}/images
 #[derive(Serialize)]
 struct ListImagesResponse {
+    /// The list of images returned.
     images: Vec<String>,
 }
 
+/// List URIs for all images associated with a product.
 async fn list_product_images(
     State(state): State<AppState>,
     Path(product_id): Path<u32>,

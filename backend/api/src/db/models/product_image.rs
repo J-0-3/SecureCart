@@ -1,18 +1,26 @@
+//! Models for inserting and querying product images (the `product_image` table).
 use crate::db::{errors::DatabaseError, ConnectionPool};
 use sqlx::{query, query_as};
 
+/// An INSERT model for a product image. Should only be constructed/used
+/// when newly adding an image to a product.
 pub struct ProductImageInsert {
+    /// The product ID to add the image to.
     product_id: i64,
+    /// The path (URI) at which the image is stored.
     pub path: String,
 }
 
 impl ProductImageInsert {
+    /// Create a new INSERT model for a product image.
     pub fn new(product_id: u32, path: &str) -> Self {
         Self {
             product_id: i64::from(product_id),
             path: path.to_owned(),
         }
     }
+    /// Store this model as a record in the database, and return a full
+    /// ``ProductImage``.
     pub async fn store(self, db_client: &ConnectionPool) -> Result<ProductImage, DatabaseError> {
         Ok(query_as!(
             ProductImage,
@@ -25,12 +33,18 @@ impl ProductImageInsert {
     }
 }
 
+/// A `product_image` record in the database, links a URI to an image with
+/// a given product ID.
 pub struct ProductImage {
+    /// The product ID the image is linked to.
     product_id: i64,
+    /// The path within the media store where the image is stored.
     pub path: String,
 }
 
 impl ProductImage {
+    /// Retrieve a specific record for a given path associated with a given product,
+    /// in order to perform U/D operations on it.
     pub async fn select(
         product_id: u32,
         path: &str,
@@ -45,6 +59,8 @@ impl ProductImage {
         .fetch_optional(db_client)
         .await?)
     }
+
+    /// Retrieve all image paths associated with a given product.
     pub async fn select_all(
         product_id: u32,
         db_client: &ConnectionPool,
@@ -58,6 +74,9 @@ impl ProductImage {
         .await?)
     }
 
+    /// Delete the image from the associated product. DOES NOT delete the image from
+    /// the media store, only the record in the database associating it with
+    /// a given product.
     pub async fn delete(self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
         Ok(query!(
             "DELETE FROM product_image WHERE product_id = $1 AND path = $2",

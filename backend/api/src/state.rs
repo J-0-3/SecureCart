@@ -1,4 +1,12 @@
 //! Defines the state shared across the Axum application.
+#[expect(
+    clippy::useless_attribute,
+    reason = "Lint is enabled only in clippy::restrictions"
+)]
+#[expect(
+    clippy::std_instead_of_alloc,
+    reason = "Does not work outside of no_std"
+)]
 use std::sync::Arc;
 
 use crate::{db, services::sessions};

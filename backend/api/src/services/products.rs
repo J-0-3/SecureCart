@@ -1,4 +1,12 @@
 //! Functions for dealing with/storing/querying products.
+#[expect(
+    clippy::useless_attribute,
+    reason = "Lint is enabled only in clippy::restrictions"
+)]
+#[expect(
+    clippy::std_instead_of_alloc,
+    reason = "Does not work outside of no_std"
+)]
 use std::sync::Arc;
 
 use object_store::ObjectStore;
@@ -145,6 +153,8 @@ pub async fn update_product(
     Ok(product.update(db_conn).await?)
 }
 
+/// Add an image to a product, returning the path (URI) at which the image can be
+/// found.
 pub async fn add_image(
     product_id: u32,
     image: Vec<u8>,
@@ -165,6 +175,7 @@ pub async fn add_image(
     ))
 }
 
+/// List the paths (URIs) of all images associated with the given product.
 pub async fn list_images(
     product_id: u32,
     db_conn: &db::ConnectionPool,
@@ -183,6 +194,7 @@ pub async fn list_images(
         .collect())
 }
 
+/// Delete an image from a product at a given path.
 pub async fn delete_image(
     product_id: u32,
     path: &str,
@@ -249,19 +261,26 @@ pub mod errors {
         #[error("The product being deleted does not exist.")]
         NonExistent,
     }
+    /// Errors returned when adding images to products.
     #[derive(Error, Debug)]
     pub enum AddImageError {
+        /// Error passed up from the database storage layer.
         #[error(transparent)]
         DatabaseError(#[from] DatabaseError),
+        /// Error passed up from the media storage layer.
         #[error(transparent)]
         MediaStoreError(#[from] StoreImageError),
+        /// Raised when the product in question does not exist.
         #[error("The product being added to does not exist.")]
         NonExistent,
     }
+    /// Errors returned when deleting images from products.
     #[derive(Error, Debug)]
     pub enum ImageDeleteError {
+        /// Error passed up from the database storage layer.
         #[error(transparent)]
         DatabaseError(#[from] DatabaseError),
+        /// Raised when the image being deleted does not exist.
         #[error("The image being deleted does not exist")]
         NonExistentImage,
     }

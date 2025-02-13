@@ -8,6 +8,14 @@ mod services;
 mod state;
 mod utils;
 
+#[expect(
+    clippy::useless_attribute,
+    reason = "Lint is enabled only in clippy::restrictions"
+)]
+#[expect(
+    clippy::std_instead_of_alloc,
+    reason = "Does not work outside of no_std"
+)]
 use std::sync::Arc;
 
 use axum::{extract::Json, routing::get};
