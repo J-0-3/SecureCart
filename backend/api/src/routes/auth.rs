@@ -5,8 +5,8 @@ use crate::{
         auth,
         errors::StorageError,
         sessions::{
-            self, AdministratorSession, CustomerSession, PreAuthenticationSession,
-            SessionTrait as _,
+            self, AdministratorSession, CustomerSession, GenericAuthenticatedSession,
+            PreAuthenticationSession, SessionTrait as _,
         },
     },
     state::AppState,
@@ -37,6 +37,12 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
             state.clone(),
             session_middleware::<PreAuthenticationSession>,
         ));
+    let authenticated = Router::new()
+        .route("/check", get(|| async {}))
+        .layer(from_fn_with_state(
+            state.clone(),
+            session_middleware::<GenericAuthenticatedSession>,
+        ));
     let customer_authenticated = Router::new()
         .route("/check/customer", get(|| async {}))
         .layer(from_fn_with_state(
@@ -50,8 +56,10 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
                 state.clone(),
                 session_middleware::<AdministratorSession>,
             ));
+
     unauthenticated
         .merge(pre_authenticated)
+        .merge(authenticated)
         .merge(customer_authenticated)
         .merge(admin_authenticated)
 }
