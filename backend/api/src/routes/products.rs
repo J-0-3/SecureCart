@@ -38,6 +38,7 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .route("/{product_id}", put(update_product))
         .route("/{product_id}", delete(delete_product))
         .route("/{product_id}/images", post(add_product_image))
+        .route("/{product_id}/images/{path}", delete(delete_product_image))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<AdministratorSession>,
@@ -189,6 +190,13 @@ async fn add_product_image(
     }
 }
 
+async fn delete_product_image(
+    State(state): State<AppState>,
+    Path((product_id, path)): Path<(u32, String)>,
+) -> Result<(), StatusCode> {
+    Ok(products::delete_image(product_id, &path, &state.db).await?)
+}
+
 #[derive(Serialize)]
 struct ListImagesResponse {
     images: Vec<String>,
@@ -246,6 +254,18 @@ impl From<products::errors::AddImageError> for StatusCode {
             }
             products::errors::AddImageError::NonExistent => {
                 eprintln!("Attempted to add an image to a product which does not exist");
+                Self::NOT_FOUND
+            }
+        }
+    }
+}
+
+impl From<products::errors::ImageDeleteError> for StatusCode {
+    fn from(err: products::errors::ImageDeleteError) -> Self {
+        match err {
+            products::errors::ImageDeleteError::DatabaseError(error) => error.into(),
+            products::errors::ImageDeleteError::NonExistentImage => {
+                eprintln!("Attempted to delete an image which does not exist");
                 Self::NOT_FOUND
             }
         }

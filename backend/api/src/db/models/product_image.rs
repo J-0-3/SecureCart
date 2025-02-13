@@ -31,6 +31,20 @@ pub struct ProductImage {
 }
 
 impl ProductImage {
+    pub async fn select(
+        product_id: u32,
+        path: &str,
+        db_client: &ConnectionPool,
+    ) -> Result<Option<Self>, DatabaseError> {
+        Ok(query_as!(
+            Self,
+            "SELECT * FROM product_image WHERE product_id = $1 AND path = $2",
+            i64::from(product_id),
+            path
+        )
+        .fetch_optional(db_client)
+        .await?)
+    }
     pub async fn select_all(
         product_id: u32,
         db_client: &ConnectionPool,

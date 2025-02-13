@@ -183,6 +183,27 @@ pub async fn list_images(
         .collect())
 }
 
+pub async fn delete_image(
+    product_id: u32,
+    path: &str,
+    db_conn: &db::ConnectionPool,
+) -> Result<(), errors::ImageDeleteError> {
+    // This removes the S3 URI and bucket if present, and ensures that the path
+    // starts with exactly one leading separator (as if relative to the bucket root).
+    let mut normalised_path = String::from("/");
+    normalised_path.push_str(
+        path.trim_start_matches(&*S3_EXTERNAL_URI)
+            .trim_start_matches('/')
+            .trim_start_matches(&*S3_BUCKET)
+            .trim_start_matches('/'),
+    );
+    let product = ProductImage::select(product_id, &normalised_path, db_conn)
+        .await?
+        .ok_or(errors::ImageDeleteError::NonExistentImage)?;
+    product.delete(db_conn).await?;
+    Ok(())
+}
+
 /// Create a new product in the database.
 pub async fn create_product(
     data: ProductInsert,
@@ -236,5 +257,12 @@ pub mod errors {
         MediaStoreError(#[from] StoreImageError),
         #[error("The product being added to does not exist.")]
         NonExistent,
+    }
+    #[derive(Error, Debug)]
+    pub enum ImageDeleteError {
+        #[error(transparent)]
+        DatabaseError(#[from] DatabaseError),
+        #[error("The image being deleted does not exist")]
+        NonExistentImage,
     }
 }
