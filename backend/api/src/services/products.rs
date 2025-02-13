@@ -2,13 +2,16 @@
 use std::sync::Arc;
 
 use object_store::ObjectStore;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::db::{
-    self,
-    models::{
-        product::{Product, ProductInsert},
-        product_image::{ProductImage, ProductImageInsert},
+use crate::{
+    constants::s3::{S3_BUCKET, S3_EXTERNAL_URI},
+    db::{
+        self,
+        models::{
+            product::{Product, ProductInsert},
+            product_image::{ProductImage, ProductImageInsert},
+        },
     },
 };
 
@@ -147,13 +150,19 @@ pub async fn add_image(
     image: Vec<u8>,
     db_conn: &db::ConnectionPool,
     media_store: Arc<dyn ObjectStore>,
-) -> Result<ProductImage, errors::AddImageError> {
+) -> Result<String, errors::AddImageError> {
     let _: Product = Product::select_one(product_id, db_conn)
         .await?
         .ok_or(errors::AddImageError::NonExistent)?;
     let image_path = media::store_image(media_store, image).await?;
     let image_insert = ProductImageInsert::new(product_id, &image_path);
-    Ok(image_insert.store(db_conn).await?)
+    let _: ProductImage = image_insert.store(db_conn).await?;
+    Ok(format!(
+        "{}/{}/{}",
+        &*S3_EXTERNAL_URI,
+        &*S3_BUCKET,
+        image_path.trim_start_matches('/')
+    ))
 }
 
 pub async fn list_images(
@@ -163,7 +172,14 @@ pub async fn list_images(
     Ok(ProductImage::select_all(product_id, db_conn)
         .await?
         .into_iter()
-        .map(|img| img.path)
+        .map(|img| {
+            format!(
+                "{}/{}/{}",
+                &*S3_EXTERNAL_URI,
+                &*S3_BUCKET,
+                img.path.trim_start_matches('/')
+            )
+        })
         .collect())
 }
 
