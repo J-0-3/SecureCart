@@ -3,16 +3,16 @@
 if [ -z "${BUCKET_NAME}" ]; then 
     BUCKET_NAME=$(cat /run/secrets/minio_bucket)
 fi
-if [ -z "${ROOT_USER}"]; then
+if [ -z "${ROOT_USER}" ]; then
     ROOT_USER=$(cat /run/secrets/minio_root_user)
 fi
-if [ -z "${ROOT_PASSWORD}"]; then
+if [ -z "${ROOT_PASSWORD}" ]; then
     ROOT_PASSWORD=$(cat /run/secrets/minio_root_password)
 fi
-if [ -z "${APP_USER}"]; then
+if [ -z "${APP_USER}" ]; then
     APP_USER=$(cat /run/secrets/minio_app_user)
 fi
-if [ -z "${APP_PASSWORD}"]; then
+if [ -z "${APP_PASSWORD}" ]; then
     APP_PASSWORD=$(cat /run/secrets/minio_app_password)
 fi
 
