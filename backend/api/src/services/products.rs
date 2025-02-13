@@ -148,6 +148,9 @@ pub async fn add_image(
     db_conn: &db::ConnectionPool,
     media_store: Arc<dyn ObjectStore>,
 ) -> Result<ProductImage, errors::AddImageError> {
+    let _: Product = Product::select_one(product_id, db_conn)
+        .await?
+        .ok_or(errors::AddImageError::NonExistent)?;
     let image_path = media::store_image(media_store, image).await?;
     let image_insert = ProductImageInsert::new(product_id, &image_path);
     Ok(image_insert.store(db_conn).await?)
@@ -215,5 +218,7 @@ pub mod errors {
         DatabaseError(#[from] DatabaseError),
         #[error(transparent)]
         MediaStoreError(#[from] StoreImageError),
+        #[error("The product being added to does not exist.")]
+        NonExistent,
     }
 }

@@ -1,6 +1,6 @@
 //! Routes for CRUD operations on products.
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     middleware::from_fn_with_state,
     routing::{delete, get, post, put},
@@ -28,6 +28,7 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .route("/all", get(list_products))
         .route("/search", get(search_products))
         .route("/{product_id}", get(get_product))
+        .route("/{product_id}/images", get(list_product_images))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<GenericAuthenticatedSession>,
@@ -36,6 +37,7 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .route("/", post(create_product))
         .route("/{product_id}", put(update_product))
         .route("/{product_id}", delete(delete_product))
+        .route("/{product_id}/images", post(add_product_image))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<AdministratorSession>,
@@ -64,14 +66,12 @@ async fn list_products(
 ) -> Result<Json<ListProductsResponse>, StatusCode> {
     let products = match session {
         GenericAuthenticatedSession::Customer(_) => {
-            products::retrieve_products::<{ ProductVisibilityScope::LISTED_ONLY }>(&state.db_conn)
+            products::retrieve_products::<{ ProductVisibilityScope::LISTED_ONLY }>(&state.db)
                 .await?
         }
         GenericAuthenticatedSession::Administrator(_) => {
-            products::retrieve_products::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(
-                &state.db_conn,
-            )
-            .await?
+            products::retrieve_products::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(&state.db)
+                .await?
         }
     };
 
@@ -86,16 +86,12 @@ async fn search_products(
 ) -> Result<Json<ListProductsResponse>, StatusCode> {
     let products = match session {
         GenericAuthenticatedSession::Customer(_) => {
-            products::search_products::<{ ProductVisibilityScope::LISTED_ONLY }>(
-                &state.db_conn,
-                &params,
-            )
-            .await?
+            products::search_products::<{ ProductVisibilityScope::LISTED_ONLY }>(&state.db, &params)
+                .await?
         }
         GenericAuthenticatedSession::Administrator(_) => {
             products::search_products::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(
-                &state.db_conn,
-                &params,
+                &state.db, &params,
             )
             .await?
         }
@@ -112,15 +108,13 @@ async fn get_product(
     let product = match session {
         GenericAuthenticatedSession::Customer(_) => {
             products::retrieve_product::<{ ProductVisibilityScope::LISTED_ONLY }>(
-                product_id,
-                &state.db_conn,
+                product_id, &state.db,
             )
             .await?
         }
         GenericAuthenticatedSession::Administrator(_) => {
             products::retrieve_product::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(
-                product_id,
-                &state.db_conn,
+                product_id, &state.db,
             )
             .await?
         }
@@ -133,7 +127,7 @@ async fn create_product(
     State(state): State<AppState>,
     Json(body): Json<ProductInsert>,
 ) -> Result<Json<Product>, StatusCode> {
-    Ok(Json(products::create_product(body, &state.db_conn).await?))
+    Ok(Json(products::create_product(body, &state.db).await?))
 }
 
 /// Delete a product.
@@ -141,7 +135,7 @@ async fn delete_product(
     State(state): State<AppState>,
     Path(product_id): Path<u32>,
 ) -> Result<(), StatusCode> {
-    Ok(products::delete_product(product_id, &state.db_conn).await?)
+    Ok(products::delete_product(product_id, &state.db).await?)
 }
 
 /// Update a product.
@@ -150,7 +144,65 @@ async fn update_product(
     Path(product_id): Path<u32>,
     Json(body): Json<ProductUpdate>,
 ) -> Result<(), StatusCode> {
-    Ok(products::update_product(product_id, body, &state.db_conn).await?)
+    Ok(products::update_product(product_id, body, &state.db).await?)
+}
+
+#[derive(Serialize)]
+struct AddImageResponse {
+    path: String,
+}
+async fn add_product_image(
+    State(state): State<AppState>,
+    Path(product_id): Path<u32>,
+    mut data: Multipart,
+) -> Result<Json<AddImageResponse>, StatusCode> {
+    loop {
+        let Some(field) = data.next_field().await.map_err(|err| {
+            eprintln!("Error while processing multipart data: {err}");
+            StatusCode::UNPROCESSABLE_ENTITY
+        })?
+        else {
+            eprintln!("Image was not included in multipart form data.");
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+        };
+        if field.name().ok_or_else(|| {
+            eprintln!("Multipart field missing name");
+            StatusCode::UNPROCESSABLE_ENTITY
+        })? == "image"
+        {
+            let result = products::add_image(
+                product_id,
+                field
+                    .bytes()
+                    .await
+                    .map_err(|err| {
+                        eprintln!("Multipart form image data unprocessable: {err}");
+                        StatusCode::UNPROCESSABLE_ENTITY
+                    })?
+                    .to_vec(),
+                &state.db,
+                state.media_store,
+            )
+            .await?;
+            break Ok(Json(AddImageResponse { path: result.path }));
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct ListImagesResponse {
+    images: Vec<String>,
+}
+
+async fn list_product_images(
+    State(state): State<AppState>,
+    Path(product_id): Path<u32>,
+) -> Result<Json<ListImagesResponse>, StatusCode> {
+    Ok(Json(
+        products::list_images(product_id, &state.db)
+            .await
+            .map(|images| ListImagesResponse { images })?,
+    ))
 }
 
 impl From<DatabaseError> for StatusCode {
@@ -178,6 +230,22 @@ impl From<products::errors::ProductUpdateError> for StatusCode {
             products::errors::ProductUpdateError::DatabaseError(error) => error.into(),
             products::errors::ProductUpdateError::NonExistent => {
                 eprintln!("Attempted to update a product which does not exist");
+                Self::NOT_FOUND
+            }
+        }
+    }
+}
+
+impl From<products::errors::AddImageError> for StatusCode {
+    fn from(err: products::errors::AddImageError) -> Self {
+        match err {
+            products::errors::AddImageError::DatabaseError(error) => error.into(),
+            products::errors::AddImageError::MediaStoreError(error) => {
+                eprintln!("Error in media object store while adding image: {error}");
+                Self::INTERNAL_SERVER_ERROR
+            }
+            products::errors::AddImageError::NonExistent => {
+                eprintln!("Attempted to add an image to a product which does not exist");
                 Self::NOT_FOUND
             }
         }

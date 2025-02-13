@@ -6,32 +6,39 @@ use std::path::PathBuf;
 )]
 use std::sync::Arc;
 
-use object_store::{path::Path, ObjectStore, PutPayload};
+use object_store::{path::Path, Attribute, Attributes, ObjectStore, PutOptions, PutPayload};
 use sha2::{Digest as _, Sha256};
 
 const IMAGE_PREFIX: &str = "/images";
 
 enum ImageFileType {
-    PNG,
-    JPG,
-    GIF,
+    Png,
+    Jpg,
+    Gif,
 }
 
 impl ImageFileType {
-    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+    const fn from_bytes(bytes: &[u8]) -> Option<Self> {
         match bytes {
-            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ..] => Some(Self::PNG),
+            [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ..] => Some(Self::Png),
             [0xff, 0xd8, 0xff, 0xe0 | 0xee, ..]
-            | [0xff, 0xd8, 0xff, 0xe1, _, _, 0x45, 0x78, 0x69, 0x66, 0, 0] => Some(Self::JPG),
-            [0x47, 0x49, 0x46, 0x38, 0x37 | 0x39, 0x61] => Some(Self::GIF),
+            | [0xff, 0xd8, 0xff, 0xe1, _, _, 0x45, 0x78, 0x69, 0x66, 0, 0] => Some(Self::Jpg),
+            [0x47, 0x49, 0x46, 0x38, 0x37 | 0x39, 0x61] => Some(Self::Gif),
             _ => None,
         }
     }
-    fn extension(&self) -> &str {
+    const fn extension(&self) -> &str {
         match self {
-            Self::PNG => "png",
-            Self::JPG => "jpg",
-            Self::GIF => "gif",
+            Self::Png => "png",
+            Self::Jpg => "jpg",
+            Self::Gif => "gif",
+        }
+    }
+    const fn mimetype(&self) -> &str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpg => "image/jpeg",
+            Self::Gif => "image/gif",
         }
     }
 }
@@ -54,8 +61,22 @@ pub async fn store_image(
         .into_owned();
     // object_store will upsert by default, and since we use hashes, this will implicitely
     // dedup image storage.
+    let mut object_attributes = Attributes::with_capacity(1);
+    object_attributes.insert(
+        Attribute::ContentType,
+        file_type.mimetype().to_owned().into(),
+    );
+    object_attributes.insert(Attribute::ContentDisposition, "inline".into());
+    let put_opts = PutOptions {
+        attributes: object_attributes,
+        ..Default::default()
+    };
     store
-        .put(&Path::from(object_path.as_str()), PutPayload::from(image))
+        .put_opts(
+            &Path::from(object_path.as_str()),
+            PutPayload::from(image),
+            put_opts,
+        )
         .await
         .map_err(errors::StorageError::from)?;
     Ok(object_path)
