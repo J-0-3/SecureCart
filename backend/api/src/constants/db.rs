@@ -1,12 +1,11 @@
 //! Database connection related constants.
 use super::secrets::read_secret;
-use std::sync::LazyLock;
 use std::env::var;
+use std::sync::LazyLock;
 
 /// The hostname where the database server is accessible.
-pub static DB_HOST: LazyLock<String> = LazyLock::new(|| {
-    var("DB_HOST").expect("DB_HOST not provided in environment variables")
-});
+pub static DB_HOST: LazyLock<String> =
+    LazyLock::new(|| var("DB_HOST").expect("DB_HOST not provided in environment variables"));
 
 /// The username to authenticate to the database server with.
 pub static DB_USERNAME: LazyLock<String> = LazyLock::new(|| {

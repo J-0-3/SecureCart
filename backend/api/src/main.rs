@@ -9,10 +9,20 @@ mod state;
 mod utils;
 
 use axum::{extract::Json, routing::get};
+use object_store::aws::AmazonS3Builder;
 use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() {
+    let s3 = AmazonS3Builder::new()
+        .with_endpoint(format!("http://{}:9000", constants::s3::S3_HOST.clone()))
+        .with_bucket_name(constants::s3::S3_BUCKET.clone())
+        .with_access_key_id(constants::s3::S3_ACCESS_KEY.clone())
+        .with_secret_access_key(constants::s3::S3_SECRET_KEY.clone())
+        .with_allow_http(true)
+        .build()
+        .expect("Could not connect to S3-compatible object storage");
+    println!("CONNECTED TO S3: {s3}");
     let db_conn = db::connect()
         .await
         .expect("Could not connect to primary database");
