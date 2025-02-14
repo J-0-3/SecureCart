@@ -1,6 +1,5 @@
 interface AuthenticationResponse {
     mfa_required: boolean,
-    is_admin?: boolean
 }
 
 function show_failure_modal(message: string) {
