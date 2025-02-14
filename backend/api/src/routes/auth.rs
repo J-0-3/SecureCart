@@ -27,11 +27,10 @@ use serde::{Deserialize, Serialize};
 /// Create a router for the /auth route.
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let unauthenticated = Router::new()
-        .route("/", get(root))
-        .route("/methods", get(list_methods))
-        .route("/login", post(login));
+        .route("/", get(list_methods))
+        .route("/", post(login));
     let pre_authenticated = Router::new()
-        .route("/2fa/methods", get(get_mfa_methods))
+        .route("/2fa", get(get_mfa_methods))
         .route("/2fa", post(authenticate_2fa))
         .layer(from_fn_with_state(
             state.clone(),
@@ -62,11 +61,6 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .merge(authenticated)
         .merge(customer_authenticated)
         .merge(admin_authenticated)
-}
-
-/// Simply returns a happy message :)
-async fn root() -> Json<String> {
-    Json("Authentication service is running! Yippee!".to_owned())
 }
 
 #[derive(Serialize)]
