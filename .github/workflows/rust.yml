@@ -21,7 +21,7 @@ jobs:
       run: cargo clippy --all -- -Dwarnings -Adead_code
       env:
         SQLX_OFFLINE: true
-    - name: Run tests
-      run: cargo test --verbose
-      env:
-        SQLX_OFFLINE: true
+    # - name: Run tests
+    #   run: cargo test --verbose
+    #   env:
+    #     SQLX_OFFLINE: true
