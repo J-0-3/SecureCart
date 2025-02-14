@@ -38,12 +38,11 @@ async function attempt_login() {
     }
 }
 
-function register_event_handlers() {
+document.addEventListener('DOMContentLoaded', () => {
     document.getElementById("login-form")!.addEventListener("submit", (evt) => {
         evt.preventDefault();
         attempt_login();
         return false // this seems to stop the form reloading with preventDefault
     });
-}
 
-document.addEventListener('DOMContentLoaded', register_event_handlers);
+});
