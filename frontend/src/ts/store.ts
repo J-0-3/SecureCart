@@ -70,6 +70,17 @@ function update_price_labels() {
     document.getElementById("price-max-value")!.textContent = `£${(Number(price_max_input.value) / 100).toFixed(2)}`;
 }
 
+async function logout() {
+    const response = await fetch("/api/auth", {
+        "method": "DELETE",
+    });
+    if (!response.ok) {
+        console.error("Failed to logout");
+        return
+    }
+    window.location.replace("/");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     await update_products();
     document.getElementById("search")!.addEventListener("keydown", (event) => {
@@ -83,5 +94,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("price-min")!.addEventListener("change", update_products);
     document.getElementById("price-max")!.addEventListener("change", update_products);
     update_price_labels();
+    document.getElementById("logout")!.addEventListener("click", logout);
 });
 
