@@ -33,7 +33,7 @@ function render_products(products: Product[]) {
                 <img src="${product.images[0]}" class="card-img-top" alt="${product.name}" style="height: 350px; object-fit: contain;">
                 <div class="card-body d-flex flex-column justify-content-end">
                     <h5 class="card-title">${product.name}</h5>
-                    <p class="card-text">£${(product.price / 100).toFixed(2)}</p>
+                    <p class="card-text">${product.description}<br>£${(product.price / 100).toFixed(2)}</p>
                     <button class="btn btn-primary mt-auto" id="cart-button-${product.id}">Add to Cart</button>
                 </div>
             </div>
