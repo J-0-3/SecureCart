@@ -79,7 +79,7 @@ impl Product {
     /// Select a `Product` from the database by its ID.
     pub async fn select_one(id: u32, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
         Ok(query_as!(Self, r#"SELECT id, name, description, listed, price,
-                COALESCE(array_agg(path), '{}'::text[]) AS "images!"
+                array_remove(array_agg(path), NULL) AS "images!"
                 FROM product LEFT JOIN product_image ON product.id = product_image.product_id
                 WHERE id = $1 GROUP BY id"#, i64::from(id))
             .fetch_optional(db_client)
@@ -88,7 +88,7 @@ impl Product {
     /// Retrieve all `Product`s stored in the database.
     pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
         Ok(query_as!(Self, r#"SELECT id, name, description, listed, price,
-                COALESCE(array_agg(path), '{}'::text[]) AS "images!"
+                array_remove(array_agg(path), NULL) AS "images!"
                 FROM product LEFT JOIN product_image ON product.id = product_image.product_id
                 GROUP BY id"#)
             .fetch_all(db_client)
@@ -102,7 +102,7 @@ impl Product {
         // 1=1 is used to make adding additional criteria simpler, since they will always
         // use AND.
         let mut query = QueryBuilder::new(r#"SELECT id, name, description, listed, price,
-            COALESCE(array_agg(path), '{}'::text[]) AS "images"
+            array_remove(array_agg(path), NULL) AS "images"
             FROM product LEFT JOIN product_image ON product.id = product_image.product_id WHERE 1=1"#);
         if let Some(ref name) = params.name {
             query.push(" AND name LIKE ");
