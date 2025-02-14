@@ -23,14 +23,45 @@ async function fetch_products(name: string, price_min: number, price_max: number
 function render_products(products: Product[]) {
     const product_list = document.getElementById("product-list")!;
     product_list.innerHTML = "";
+
     products.forEach(product => {
         if (product.images.length === 0) return;
+
+        const carouselId = `carousel-${product.id}`;
+        const carouselIndicators = product.images.map((_, index) => `
+            <button type="button" data-bs-target="#${carouselId}" data-bs-slide-to="${index}" 
+                class="${index === 0 ? "active" : ""}" aria-current="${index === 0 ? "true" : "false"}" 
+                aria-label="Slide ${index + 1}">
+            </button>
+        `).join("");
+
+        const carouselInner = product.images.map((image, index) => `
+            <div class="carousel-item ${index === 0 ? "active" : ""}">
+                <img src="${image}" class="d-block w-100" alt="${product.name}" 
+                    style="height: 350px; object-fit: contain;">
+            </div>
+        `).join("");
 
         const card = document.createElement("div");
         card.className = "col";
         card.innerHTML = `
             <div class="card h-100 shadow-sm d-flex flex-column">
-                <img src="${product.images[0]}" class="card-img-top" alt="${product.name}" style="height: 350px; object-fit: contain;">
+                <div id="${carouselId}" class="carousel slide" data-bs-ride="carousel">
+                    <div class="carousel-indicators">
+                        ${carouselIndicators}
+                    </div>
+                    <div class="carousel-inner">
+                        ${carouselInner}
+                    </div>
+                    <button class="carousel-control-prev" type="button" data-bs-target="#${carouselId}" data-bs-slide="prev">
+                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">Previous</span>
+                    </button>
+                    <button class="carousel-control-next" type="button" data-bs-target="#${carouselId}" data-bs-slide="next">
+                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                        <span class="visually-hidden">Next</span>
+                    </button>
+                </div>
                 <div class="card-body d-flex flex-column justify-content-end">
                     <h5 class="card-title">${product.name}</h5>
                     <p class="card-text">£${(product.price / 100).toFixed(2)}</p>
@@ -38,11 +69,14 @@ function render_products(products: Product[]) {
                 </div>
             </div>
         `;
+
         product_list.appendChild(card);
         const cart_button = document.getElementById(`cart-button-${product.id}`)!;
         cart_button.addEventListener("click", () => add_to_cart(product.id));
     });
 }
+
+
 
 function update_cart_counter(amount: number) {
     const counter = document.getElementById("cart-counter")!;
