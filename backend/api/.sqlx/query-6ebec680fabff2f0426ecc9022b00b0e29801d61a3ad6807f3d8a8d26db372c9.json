@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, email, forename, surname, age, role AS \"role!: AppUserRole\" FROM appuser",
+  "query": "SELECT id, email, pgp_sym_decrypt(forename, $2) AS \"forename!\",\n            pgp_sym_decrypt(surname, $2) AS \"surname!\",\n            pgp_sym_decrypt(address, $2) AS \"address!\",\n            role AS \"role!: AppUserRole\" FROM appuser WHERE email = $1",
   "describe": {
     "columns": [
       {
@@ -15,18 +15,18 @@
       },
       {
         "ordinal": 2,
-        "name": "forename",
+        "name": "forename!",
         "type_info": "Text"
       },
       {
         "ordinal": 3,
-        "name": "surname",
+        "name": "surname!",
         "type_info": "Text"
       },
       {
         "ordinal": 4,
-        "name": "age",
-        "type_info": "Int2"
+        "name": "address!",
+        "type_info": "Text"
       },
       {
         "ordinal": 5,
@@ -45,16 +45,19 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text",
+        "Text"
+      ]
     },
     "nullable": [
       false,
       false,
-      false,
-      false,
-      false,
+      null,
+      null,
+      null,
       false
     ]
   },
-  "hash": "d8f9f099cc5ddb037e6280121d54defb36e80a372790c8680c033891d2d1dcc0"
+  "hash": "6ebec680fabff2f0426ecc9022b00b0e29801d61a3ad6807f3d8a8d26db372c9"
 }

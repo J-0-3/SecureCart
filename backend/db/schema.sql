@@ -1,11 +1,12 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TYPE app_user_role AS ENUM ('Customer', 'Administrator');
 
 CREATE TABLE appuser (
     id BIGSERIAL PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
-    forename TEXT NOT NULL,
-    surname TEXT NOT NULL,
-    age SMALLINT NOT NULL,
+    forename BYTEA NOT NULL,
+    surname BYTEA NOT NULL,
+    address BYTEA NOT NULL,
     role app_user_role NOT NULL
 );
 
@@ -30,28 +31,6 @@ CREATE TABLE product_image (
     path TEXT NOT NULL,
     PRIMARY KEY(product_id, path),
     CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product(id)
-);
-CREATE TABLE category (
-    id BIGSERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
-    description TEXT NOT NULL
-);
-CREATE TABLE category_membership (
-    product_id BIGINT, 
-    category_id BIGINT,
-    PRIMARY KEY(product_id, category_id),
-    CONSTRAINT fk_product FOREIGN KEY (product_id) REFERENCES product(id),
-    CONSTRAINT fk_category FOREIGN KEY (category_id) REFERENCES category(id)
-);
-CREATE TABLE offer (
-    id BIGSERIAL PRIMARY KEY,
-    percentage SMALLINT NOT NULL,
-    label TEXT
-);
-CREATE TABLE offer_membership (
-    product_id BIGINT,
-    offer_id BIGINT,
-    PRIMARY KEY (product_id, offer_id)
 );
 CREATE TABLE apporder (
     id BIGSERIAL PRIMARY KEY,

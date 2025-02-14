@@ -2,6 +2,7 @@
 //! associated information.
 #![expect(clippy::pattern_type_mismatch, reason = "SQLx enum bug")]
 use crate::{
+    constants::db::DB_ENCRYPTION_KEY,
     db::{errors::DatabaseError, ConnectionPool},
     utils::email::EmailAddress,
 };
@@ -17,8 +18,8 @@ pub struct AppUserInsert {
     pub forename: String,
     /// The user's surname.
     pub surname: String,
-    /// The user's age. Signed to match Postgres SMALLINT, private to enforce range.
-    age: i16,
+    /// The user's address.
+    pub address: String,
 }
 
 #[derive(sqlx::Type)]
@@ -42,24 +43,19 @@ pub struct AppUser {
     /// The user's surname.
     pub surname: String,
     /// The user's age.
-    age: i16,
+    pub address: String,
     /// The user's role (customer or admin).
     pub role: AppUserRole,
 }
 
 impl AppUserInsert {
     /// Construct a new `AppUser` INSERT model.
-    pub fn new(
-        email: EmailAddress,
-        forename: &str,
-        surname: &str,
-        age: u8, // ensures age is > 0, reasonable, and fits in an i16
-    ) -> Self {
+    pub fn new(email: EmailAddress, forename: &str, surname: &str, address: &str) -> Self {
         Self {
             email: email.into(),
             forename: forename.to_owned(),
             surname: surname.to_owned(),
-            age: i16::from(age),
+            address: address.to_owned(),
         }
     }
 
@@ -72,12 +68,18 @@ impl AppUserInsert {
         #[expect(clippy::as_conversions, reason="Used in query_as! macro for Postgres coersion")]
         Ok(query_as!(
             AppUser,
-            r#"INSERT INTO appuser (email, forename, surname, age, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, forename, surname, age, role AS "role!: AppUserRole""#,
+            r#"INSERT INTO appuser
+            (email, forename, surname, address, role)
+            VALUES ($1, pgp_sym_encrypt($2, $6), pgp_sym_encrypt($3, $6), pgp_sym_encrypt($4, $6), $5)
+            RETURNING id, email, pgp_sym_decrypt(forename, $6) AS "forename!",
+            pgp_sym_decrypt(surname, $6) AS "surname!",
+            pgp_sym_decrypt(address, $6) AS "address!", role AS "role!: AppUserRole""#,
             self.email,
             self.forename,
             self.surname,
-            self.age,
-            role as AppUserRole
+            self.address,
+            role as AppUserRole,
+            *DB_ENCRYPTION_KEY
         ).fetch_one(db_client).await?)
     }
 
@@ -85,11 +87,6 @@ impl AppUserInsert {
     pub fn email(&self) -> EmailAddress {
         EmailAddress::try_from(self.email.clone())
             .expect("Solar bit flip has changed an email address")
-    }
-
-    /// Return the age value of this `AppUserInsert`.
-    pub fn age(&self) -> u8 {
-        u8::try_from(self.age).expect("Somehow a non-u8 value got into an AppUserInsert.")
     }
 }
 
@@ -104,35 +101,46 @@ impl AppUser {
         EmailAddress::try_from(self.email.clone())
             .expect("Invalid email format read from the database.")
     }
-    /// Get the user's age.
-    pub fn age(&self) -> u8 {
-        u8::try_from(self.age).expect("Invalid age range read from the database.")
-    }
     /// Select an `AppUser` from the database by ID.
     pub async fn select_one(
         id: u32,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(Self, r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser WHERE id = $1"#, i64::from(id))
-            .fetch_optional(db_client)
-            .await?)
+        Ok(query_as!(
+            Self,
+            r#"SELECT id, email, pgp_sym_decrypt(forename, $2) AS "forename!",
+            pgp_sym_decrypt(surname, $2) AS "surname!",
+            pgp_sym_decrypt(address, $2) AS "address!",
+            role AS "role!: AppUserRole" FROM appuser WHERE id = $1"#,
+            i64::from(id),
+            *DB_ENCRYPTION_KEY
+        )
+        .fetch_optional(db_client)
+        .await?)
     }
     /// Select an `AppUser` from the database by email.
     pub async fn select_by_email(
         email: &str,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
-        Ok(
-            query_as!(Self, r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser WHERE email = $1"#, email)
-                .fetch_optional(db_client)
-                .await?,
+        Ok(query_as!(
+            Self,
+            r#"SELECT id, email, pgp_sym_decrypt(forename, $2) AS "forename!",
+            pgp_sym_decrypt(surname, $2) AS "surname!",
+            pgp_sym_decrypt(address, $2) AS "address!",
+            role AS "role!: AppUserRole" FROM appuser WHERE email = $1"#,
+            email,
+            *DB_ENCRYPTION_KEY
         )
+        .fetch_optional(db_client)
+        .await?)
     }
     /// Retrieve all `AppUser` records in the database.
     pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
         Ok(query_as!(
             Self,
-            r#"SELECT id, email, forename, surname, age, role AS "role!: AppUserRole" FROM appuser"#
+            r#"SELECT id, email, pgp_sym_decrypt(forename, $1) AS "forename!", pgp_sym_decrypt(surname, $1) AS "surname!", pgp_sym_decrypt(address, $1) AS "address!", role AS "role!: AppUserRole" FROM appuser"#,
+            *DB_ENCRYPTION_KEY
         )
         .fetch_all(db_client)
         .await?)
@@ -140,12 +148,13 @@ impl AppUser {
     /// Update the database record to match the model's current state.
     pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
         query!(
-            "UPDATE appuser SET email = $1, forename = $2, surname = $3, age = $4 WHERE id = $5",
+            "UPDATE appuser SET email = $1, forename = pgp_sym_encrypt($2, $6), surname = pgp_sym_encrypt($3, $6), address = pgp_sym_encrypt($4, $6) WHERE id = $5",
             self.email,
             self.forename,
             self.surname,
-            self.age,
-            self.id
+            self.address,
+            self.id,
+            *DB_ENCRYPTION_KEY
         )
         .execute(db_client)
         .await?;
