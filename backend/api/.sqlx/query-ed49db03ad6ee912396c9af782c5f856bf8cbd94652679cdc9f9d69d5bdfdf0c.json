@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, description, listed, price,\n                COALESCE(array_agg(path), '{}'::text[]) AS \"images!\"\n                FROM product LEFT JOIN product_image ON product.id = product_image.product_id\n                GROUP BY id",
+  "query": "SELECT id, name, description, listed, price,\n                array_remove(array_agg(path), NULL) AS \"images!\"\n                FROM product LEFT JOIN product_image ON product.id = product_image.product_id\n                WHERE id = $1 GROUP BY id",
   "describe": {
     "columns": [
       {
@@ -35,7 +35,9 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int8"
+      ]
     },
     "nullable": [
       false,
@@ -46,5 +48,5 @@
       null
     ]
   },
-  "hash": "3cc60d997855170c9eca8ee6107a9ecf37bb20447d7c7fb0fc96e3f08ac7308a"
+  "hash": "ed49db03ad6ee912396c9af782c5f856bf8cbd94652679cdc9f9d69d5bdfdf0c"
 }
