@@ -1,7 +1,7 @@
 //! Models mapping to the product database table. Represents a purchaseable
 //! product in the store.
 use serde::{Deserialize, Serialize};
-use sqlx::{query, query_as};
+use sqlx::{query, query_as, FromRow, QueryBuilder};
 use crate::db::{ConnectionPool, errors::DatabaseError};
 
 /// INSERT model for a `product`. Used ONLY when adding a new product.
@@ -19,7 +19,7 @@ pub struct ProductInsert {
 
 /// A `Product` which is stored in the database. Can only be constructed by
 /// reading it from the database.
-#[derive(Serialize)]
+#[derive(Serialize, FromRow)]
 pub struct Product {
     /// The product's ID primary key.
     id: i64,
@@ -61,6 +61,18 @@ impl ProductInsert {
     }
 }
 
+#[derive(Default)]
+pub struct ProductSearchParameters {
+    /// The name to search for. Will match any product starting with this.
+    pub name: Option<String>,
+    /// The minimum price bound. Will match only products which cost more than this.
+    pub price_min: Option<u32>,
+    /// The maximum price bound. Will match only products which cost less than this.
+    pub price_max: Option<u32>,
+    /// Whether the products are listed.
+    pub listed: Option<bool>
+}
+
 impl Product {
     /// Select a `Product` from the database by its ID.
     pub async fn select_one(id: u32, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
@@ -71,6 +83,41 @@ impl Product {
     /// Retrieve all `Product`s stored in the database.
     pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
         Ok(query_as!(Self, "SELECT * FROM product").fetch_all(db_client).await?)
+    }
+    
+    /// Return all `Product`s matching a given set of search parameters (see
+    /// `ProductSearchParameters`). If all parameters are None, this is the
+    /// same as calling `select_all`.
+    pub async fn search(params: &ProductSearchParameters ,db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
+        // 1=1 is used to make adding additional criteria simpler, since they will always
+        // use AND.
+        let mut query = QueryBuilder::new("SELECT * FROM product WHERE 1=1");
+        if let Some(ref name) = params.name {
+            query.push(" AND name LIKE ");
+            // We don't strictly need to do this, the query is already parameterised
+            // and safe, but % will still be treated as a wildcard, which
+            // might be unexpected if searching for products whose names contain
+            // a literal '%' character.
+            let escaped_name = name
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            query.push_bind(format!("{escaped_name}%"));  
+            query.push(" ESCAPE '\\' ");
+        }
+        if let Some(min) = params.price_min {
+            query.push(" AND price >= ");
+            query.push_bind(i64::from(min));
+        }
+        if let Some(max) = params.price_max {
+            query.push(" AND price <= ");
+            query.push_bind(i64::from(max));
+        }
+        if let Some(listed) = params.listed {
+            query.push(" AND listed = ");
+            query.push_bind(listed);
+        }
+        Ok(query.build_query_as().fetch_all(db_client).await?)
     }
     /// Set this product as listed.
     pub fn list(&mut self) {

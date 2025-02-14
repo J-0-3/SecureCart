@@ -23,10 +23,8 @@ use crate::{
 
 /// Create a router for routes under the product service.
 pub fn create_router(state: &AppState) -> Router<AppState> {
-    let unauthenticated = Router::new().route("/", get(root));
     let authenticated = Router::new()
-        .route("/all", get(list_products))
-        .route("/search", get(search_products))
+        .route("/", get(search_products))
         .route("/{product_id}", get(get_product))
         .route("/{product_id}/images", get(list_product_images))
         .layer(from_fn_with_state(
@@ -43,40 +41,14 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
             state.clone(),
             session_middleware::<AdministratorSession>,
         ));
-    unauthenticated
-        .merge(authenticated)
-        .merge(admin_authenticated)
+    authenticated.merge(admin_authenticated)
 }
 
-/// Simply a healthcheck that this component is functional.
-async fn root() -> Json<String> {
-    Json("Products service is running".to_owned())
-}
-
-/// The response to /products/all or /products/search.
+/// The response to /products or /products/search.
 #[derive(Serialize)]
 struct ListProductsResponse {
     /// The products returned by the query.
     products: Vec<Product>,
-}
-
-/// List all listed stored products.
-async fn list_products(
-    State(state): State<AppState>,
-    Extension(session): Extension<GenericAuthenticatedSession>,
-) -> Result<Json<ListProductsResponse>, StatusCode> {
-    let products = match session {
-        GenericAuthenticatedSession::Customer(_) => {
-            products::retrieve_products::<{ ProductVisibilityScope::LISTED_ONLY }>(&state.db)
-                .await?
-        }
-        GenericAuthenticatedSession::Administrator(_) => {
-            products::retrieve_products::<{ ProductVisibilityScope::INCLUDE_UNLISTED }>(&state.db)
-                .await?
-        }
-    };
-
-    Ok(Json(ListProductsResponse { products }))
 }
 
 /// Search for matching products.

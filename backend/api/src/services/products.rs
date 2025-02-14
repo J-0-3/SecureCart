@@ -60,17 +60,20 @@ pub async fn retrieve_product<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
 pub async fn retrieve_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
-    Ok(Product::select_all(db_conn)
-        .await?
-        .into_iter()
-        .filter(|prod| {
-            VISIBILITY_SCOPE == ProductVisibilityScope::INCLUDE_UNLISTED || prod.is_listed()
-        })
-        .collect())
+    Product::search(
+        &db::models::product::ProductSearchParameters {
+            listed: (VISIBILITY_SCOPE == ProductVisibilityScope::LISTED_ONLY).then_some(true),
+            ..Default::default()
+        },
+        db_conn,
+    )
+    .await
 }
 
 /// The parameters for a search over stored products. Any/all of the included
-/// parameters can be set.
+/// parameters can be set. This is a subset of the options available in
+/// `db::models::product::ProductSearchParameters` which are settable by
+/// external callers.
 #[derive(Deserialize)]
 pub struct ProductSearchParameters {
     /// The name to search for. Will match any product starting with this.
@@ -88,26 +91,16 @@ pub async fn search_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     db_conn: &db::ConnectionPool,
     params: &ProductSearchParameters,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
-    let mut result = Vec::new();
-    // We clone search_name here to avoid cloning the entire struct.
-    let search_name = params.name.clone();
-    let search_price_min = params.price_min;
-    let search_price_max = params.price_max;
-    for product in retrieve_products::<VISIBILITY_SCOPE>(db_conn).await? {
-        let name_match = search_name
-            .as_ref()
-            .is_none_or(|name| product.name.starts_with(name));
-        let price_min_match = search_price_min
-            .as_ref()
-            .is_none_or(|price| product.price() >= *price);
-        let price_max_match = search_price_max
-            .as_ref()
-            .is_none_or(|price| product.price() <= *price);
-        if name_match && price_min_match && price_max_match {
-            result.push(product);
-        }
-    }
-    Ok(result)
+    Product::search(
+        &db::models::product::ProductSearchParameters {
+            name: params.name.clone(),
+            price_min: params.price_min,
+            price_max: params.price_max,
+            listed: (VISIBILITY_SCOPE == ProductVisibilityScope::LISTED_ONLY).then_some(true),
+        },
+        db_conn,
+    )
+    .await
 }
 
 /// UPDATE model for a product. All fields are optional, so an empty JSON
