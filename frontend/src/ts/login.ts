@@ -11,7 +11,7 @@ function show_failure_modal(message: string) {
 async function attempt_login() {
     const email = (document.getElementById("email")! as HTMLInputElement).value;
     const password = (document.getElementById("password")! as HTMLInputElement).value;
-    const response = await fetch("/api/auth/login", {
+    const response = await fetch("/api/auth", {
         method: "post",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

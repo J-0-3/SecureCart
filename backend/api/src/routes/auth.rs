@@ -15,7 +15,7 @@ use axum::{
     extract::{Extension, Json, State},
     http::StatusCode,
     middleware::from_fn_with_state,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use axum_extra::extract::{
@@ -27,17 +27,10 @@ use serde::{Deserialize, Serialize};
 /// Create a router for the /auth route.
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let unauthenticated = Router::new()
-        .route("/", get(root))
-        .route("/methods", get(list_methods))
-        .route("/login", post(login));
-    let pre_authenticated = Router::new()
-        .route("/2fa/methods", get(get_mfa_methods))
-        .route("/2fa", post(authenticate_2fa))
-        .layer(from_fn_with_state(
-            state.clone(),
-            session_middleware::<PreAuthenticationSession>,
-        ));
+        .route("/", get(list_methods))
+        .route("/", post(login));
     let authenticated = Router::new()
+        .route("/", delete(logout))
         .route("/check", get(|| async {}))
         .layer(from_fn_with_state(
             state.clone(),
@@ -56,17 +49,19 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
                 state.clone(),
                 session_middleware::<AdministratorSession>,
             ));
+    let pre_authenticated = Router::new()
+        .route("/2fa", get(get_mfa_methods))
+        .route("/2fa", post(authenticate_2fa))
+        .layer(from_fn_with_state(
+            state.clone(),
+            session_middleware::<PreAuthenticationSession>,
+        ));
 
     unauthenticated
         .merge(pre_authenticated)
         .merge(authenticated)
         .merge(customer_authenticated)
         .merge(admin_authenticated)
-}
-
-/// Simply returns a happy message :)
-async fn root() -> Json<String> {
-    Json("Authentication service is running! Yippee!".to_owned())
 }
 
 #[derive(Serialize)]
@@ -100,6 +95,17 @@ struct AuthenticateResponse {
     pub is_admin: Option<bool>,
 }
 
+/// Logout the currently authenticated user.
+async fn logout(
+    cookies: CookieJar,
+    State(state): State<AppState>,
+    Extension(session): Extension<GenericAuthenticatedSession>,
+) -> Result<CookieJar, StatusCode> {
+    session.delete(&mut state.session_store.clone()).await?;
+    Ok(cookies.remove(Cookie::from("SESSION")))
+}
+
+/// Login using a credential method, and set a SESSION cookie.
 async fn login(
     cookies: CookieJar,
     State(state): State<AppState>,
@@ -215,14 +221,18 @@ impl From<sessions::errors::SessionPromotionError> for StatusCode {
                 );
                 Self::INTERNAL_SERVER_ERROR // not a 401, this is probably on us
             }
-            sessions::errors::SessionPromotionError::StorageError(error) => {
-                eprintln!("Storage error while checking session authentication: {error}");
-                Self::INTERNAL_SERVER_ERROR
-            }
+            sessions::errors::SessionPromotionError::StorageError(error) => error.into(),
             sessions::errors::SessionPromotionError::NotAuthenticated => {
                 eprintln!("Session is not authenticated.");
                 Self::UNAUTHORIZED
             }
         }
+    }
+}
+
+impl From<sessions::errors::SessionStorageError> for StatusCode {
+    fn from(err: sessions::errors::SessionStorageError) -> Self {
+        eprintln!("Storage error while accessing session store: {err}");
+        Self::INTERNAL_SERVER_ERROR
     }
 }
