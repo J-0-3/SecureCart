@@ -19,7 +19,7 @@ pub struct ProductInsert {
 
 /// A `Product` which is stored in the database. Can only be constructed by
 /// reading it from the database.
-#[derive(Serialize, FromRow)]
+#[derive(Serialize, FromRow, Clone)]
 pub struct Product {
     /// The product's ID primary key.
     id: i64,
@@ -31,6 +31,8 @@ pub struct Product {
     listed: bool,
     /// The price of the product in pennies (GBP).
     price: i64,
+    /// A list of image paths associated with this product.
+    pub images: Vec<String>
 }
 
 impl ProductInsert {
@@ -55,7 +57,7 @@ impl ProductInsert {
     pub async fn store(self, db_client: &ConnectionPool) -> Result<Product, DatabaseError> {
         Ok(query_as!(
             Product, 
-            "INSERT INTO product (name, description, listed, price) VALUES ($1, $2, $3, $4) RETURNING *",
+            r#"INSERT INTO product (name, description, listed, price) VALUES ($1, $2, $3, $4) RETURNING id, name, description, listed, price, '{}'::text[] AS "images!""#,
             self.name, self.description, self.listed, self.price
         ).fetch_one(db_client).await?)
     }
@@ -76,13 +78,21 @@ pub struct ProductSearchParameters {
 impl Product {
     /// Select a `Product` from the database by its ID.
     pub async fn select_one(id: u32, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(Self, "SELECT * FROM product WHERE id = $1", i64::from(id))
+        Ok(query_as!(Self, r#"SELECT id, name, description, listed, price,
+                COALESCE(array_agg(path), '{}'::text[]) AS "images!"
+                FROM product LEFT JOIN product_image ON product.id = product_image.product_id
+                WHERE id = $1 GROUP BY id"#, i64::from(id))
             .fetch_optional(db_client)
             .await?)
     }
     /// Retrieve all `Product`s stored in the database.
     pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
-        Ok(query_as!(Self, "SELECT * FROM product").fetch_all(db_client).await?)
+        Ok(query_as!(Self, r#"SELECT id, name, description, listed, price,
+                COALESCE(array_agg(path), '{}'::text[]) AS "images!"
+                FROM product LEFT JOIN product_image ON product.id = product_image.product_id
+                GROUP BY id"#)
+            .fetch_all(db_client)
+            .await?)
     }
     
     /// Return all `Product`s matching a given set of search parameters (see
@@ -91,7 +101,9 @@ impl Product {
     pub async fn search(params: &ProductSearchParameters ,db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
         // 1=1 is used to make adding additional criteria simpler, since they will always
         // use AND.
-        let mut query = QueryBuilder::new("SELECT * FROM product WHERE 1=1");
+        let mut query = QueryBuilder::new(r#"SELECT id, name, description, listed, price,
+            COALESCE(array_agg(path), '{}'::text[]) AS "images"
+            FROM product LEFT JOIN product_image ON product.id = product_image.product_id WHERE 1=1"#);
         if let Some(ref name) = params.name {
             query.push(" AND name LIKE ");
             // We don't strictly need to do this, the query is already parameterised
@@ -117,6 +129,7 @@ impl Product {
             query.push(" AND listed = ");
             query.push_bind(listed);
         }
+        query.push(" GROUP BY id");
         Ok(query.build_query_as().fetch_all(db_client).await?)
     }
     /// Set this product as listed.

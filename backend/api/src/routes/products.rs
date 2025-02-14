@@ -196,8 +196,8 @@ async fn list_product_images(
 }
 
 impl From<DatabaseError> for StatusCode {
-    fn from(_: DatabaseError) -> Self {
-        eprintln!("Database error in product handler");
+    fn from(err: DatabaseError) -> Self {
+        eprintln!("Database error in product handler: {err}");
         Self::INTERNAL_SERVER_ERROR
     }
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT * FROM product",
+  "query": "SELECT id, name, description, listed, price,\n                COALESCE(array_agg(path), '{}'::text[]) AS \"images!\"\n                FROM product LEFT JOIN product_image ON product.id = product_image.product_id\n                GROUP BY id",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "price",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "images!",
+        "type_info": "TextArray"
       }
     ],
     "parameters": {
@@ -37,8 +42,9 @@
       false,
       false,
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "40e5b26d2df5aa2cc92c1a45c47560092b4cbb50dd1aa24320afc6a729f16cfe"
+  "hash": "3cc60d997855170c9eca8ee6107a9ecf37bb20447d7c7fb0fc96e3f08ac7308a"
 }
