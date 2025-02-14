@@ -42,6 +42,21 @@ pub mod ProductVisibilityScope {
     pub const INCLUDE_UNLISTED: super::ProductVisibilityScopeT = true;
 }
 
+/// Takes a product, and returns a new product with the image paths modified to
+/// contain the full URI (including S3 host and bucket).
+fn with_image_uris(product: Product) -> Product {
+    let mut new_product = product;
+    new_product.images.iter_mut().for_each(|path| {
+        *path = format!(
+            "{}/{}/{}",
+            &*S3_EXTERNAL_URI,
+            &*S3_BUCKET,
+            path.trim_start_matches('/')
+        );
+    });
+    new_product
+}
+
 /// Retrieve a specific product. Generically parameterised over the visibility
 /// scope to retrieve from. `VISIBILITY_SCOPE` must *ONLY* be set to a value from
 /// `ProductVisibilityScope`, or the function's behaviour is undefined.
@@ -49,9 +64,12 @@ pub async fn retrieve_product<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     id: u32,
     db_conn: &db::ConnectionPool,
 ) -> Result<Option<Product>, db::errors::DatabaseError> {
-    Ok(Product::select_one(id, db_conn).await?.filter(|prod| {
-        VISIBILITY_SCOPE == ProductVisibilityScope::INCLUDE_UNLISTED || prod.is_listed()
-    }))
+    Ok(Product::select_one(id, db_conn)
+        .await?
+        .filter(|prod| {
+            VISIBILITY_SCOPE == ProductVisibilityScope::INCLUDE_UNLISTED || prod.is_listed()
+        })
+        .map(with_image_uris))
 }
 
 /// List all products in the database. Generically parameterised over the visibility
@@ -60,14 +78,17 @@ pub async fn retrieve_product<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
 pub async fn retrieve_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
-    Product::search(
+    Ok(Product::search(
         &db::models::product::ProductSearchParameters {
             listed: (VISIBILITY_SCOPE == ProductVisibilityScope::LISTED_ONLY).then_some(true),
             ..Default::default()
         },
         db_conn,
     )
-    .await
+    .await?
+    .into_iter()
+    .map(with_image_uris)
+    .collect())
 }
 
 /// The parameters for a search over stored products. Any/all of the included
@@ -91,7 +112,7 @@ pub async fn search_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     db_conn: &db::ConnectionPool,
     params: &ProductSearchParameters,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
-    Product::search(
+    Ok(Product::search(
         &db::models::product::ProductSearchParameters {
             name: params.name.clone(),
             price_min: params.price_min,
@@ -100,7 +121,10 @@ pub async fn search_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
         },
         db_conn,
     )
-    .await
+    .await?
+    .into_iter()
+    .map(with_image_uris)
+    .collect())
 }
 
 /// UPDATE model for a product. All fields are optional, so an empty JSON
