@@ -30,6 +30,7 @@ services:
       - DB_DATABASE=securecart
       - DB_USERNAME=securecart
       - DB_PASSWORD=securecart
+      - DB_ENCRYPTION_KEY=securecart
       - REDIS_HOST=redis
       - S3_HOST=minio
       - S3_BUCKET=media

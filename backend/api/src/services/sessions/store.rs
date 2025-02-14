@@ -121,10 +121,13 @@ impl Connection {
             .0
             .hset_multiple(
                 key,
-                &[("forename", &data.forename), ("surname", &data.surname)],
+                &[
+                    ("forename", &data.forename),
+                    ("surname", &data.surname),
+                    ("address", &data.address),
+                ],
             )
             .await?;
-        let _: () = self.0.hset(key, "age", data.age()).await?;
         Ok(())
     }
     /// Store data for a regular (authenticated/preauthentication) session
@@ -172,7 +175,7 @@ impl Connection {
         };
         let forename: String = self.0.hget(key, "forename").await?;
         let surname: String = self.0.hget(key, "surname").await?;
-        let age = self.0.hget(key, "age").await?;
+        let address: String = self.0.hget(key, "address").await?;
         Ok(Some(SessionInfo::Registration {
             user_data: AppUserInsert::new(
                 email
@@ -180,7 +183,7 @@ impl Connection {
                     .expect("Solar bit flip or act of God made email address invalid."),
                 &forename,
                 &surname,
-                age,
+                &address,
             ),
         }))
     }
