@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO apporder (user_id, order_placed, amount_charged) VALUES ($1, $2, $3) RETURNING *",
+  "query": "SELECT id, user_id, order_placed, amount_charged, status AS \"status!: AppOrderStatus\" FROM apporder WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -22,12 +22,26 @@
         "ordinal": 3,
         "name": "amount_charged",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!: AppOrderStatus",
+        "type_info": {
+          "Custom": {
+            "name": "app_order_status",
+            "kind": {
+              "Enum": [
+                "Unpaid",
+                "Confirmed",
+                "Fulfilled"
+              ]
+            }
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Timestamp",
         "Int8"
       ]
     },
@@ -35,8 +49,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "0ce20f5e7fc6c58e17e22cf4b25a57279141987d54fc3a17f0e2fe5d2a147e43"
+  "hash": "50dabb1bb676e35d2363dfc7498ee537980ba554526a07f872c645b21848c206"
 }

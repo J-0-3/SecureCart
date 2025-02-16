@@ -40,7 +40,7 @@ pub static DB_URL: LazyLock<String> = LazyLock::new(|| {
 pub static DB_ENCRYPTION_KEY: LazyLock<String> = LazyLock::new(|| {
     var("DB_ENCRYPTION_KEY").unwrap_or_else(|_| {
         let secret_path = var("DB_ENCRYPTION_KEY_DOCKER_SECRET").expect(
-            "Neither DB_ENCRYPTION_KEY nor DB_PASSWORD_DOCKER_SECRET provided in environment variables",
+            "Neither DB_ENCRYPTION_KEY nor DB_ENCRYPTION_KEY_DOCKER_SECRET provided in environment variables",
         );
         read_secret(&secret_path).expect("Failed to read DB_ENCRYPTION_KEY docker secret")
     })

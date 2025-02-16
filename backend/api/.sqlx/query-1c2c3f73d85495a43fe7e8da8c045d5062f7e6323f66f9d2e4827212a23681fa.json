@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE apporder SET user_id=$1, order_placed=$2, amount_charged=$3, status=$4 WHERE id=$5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamp",
+        "Int8",
+        {
+          "Custom": {
+            "name": "app_order_status",
+            "kind": {
+              "Enum": [
+                "Unpaid",
+                "Confirmed",
+                "Fulfilled"
+              ]
+            }
+          }
+        },
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c2c3f73d85495a43fe7e8da8c045d5062f7e6323f66f9d2e4827212a23681fa"
+}

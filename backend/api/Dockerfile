@@ -1,6 +1,6 @@
 FROM rust:alpine AS builder
 
-RUN apk add musl-dev
+RUN apk add musl-dev openssl-dev 
 WORKDIR /app
 COPY . .
 ENV SQLX_OFFLINE=false

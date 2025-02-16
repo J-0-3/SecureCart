@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, user_id, order_placed, amount_charged, status AS \"status!: AppOrderStatus\" FROM apporder",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "order_placed",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount_charged",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!: AppOrderStatus",
+        "type_info": {
+          "Custom": {
+            "name": "app_order_status",
+            "kind": {
+              "Enum": [
+                "Unpaid",
+                "Confirmed",
+                "Fulfilled"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f329d992b0a3a507a9fd63cc67bdc3af9b68f9db2d3ce7eef660e569774c4e55"
+}
