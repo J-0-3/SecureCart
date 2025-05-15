@@ -1,19 +1,19 @@
 //! Routes under /auth handling authentication related mechanisms.
 use crate::{
-    middleware::auth::session_middleware,
+    middleware::session::{session_middleware, session_middleware_no_csrf},
     services::{
         auth,
-        errors::StorageError,
         sessions::{
             self, AdministratorSession, CustomerSession, GenericAuthenticatedSession,
             PreAuthenticationSession, SessionTrait as _,
         },
     },
     state::AppState,
+    utils::{email::EmailAddress, httperror::HttpError},
 };
 use axum::{
     extract::{Extension, Json, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     middleware::from_fn_with_state,
     routing::{delete, get, post},
     Router,
@@ -31,23 +31,29 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
         .route("/", post(login));
     let authenticated = Router::new()
         .route("/", delete(logout))
-        .route("/check", get(|| async {}))
         .layer(from_fn_with_state(
             state.clone(),
             session_middleware::<GenericAuthenticatedSession>,
         ));
-    let customer_authenticated = Router::new()
+    let authenticated_no_csrf =
+        Router::new()
+            .route("/check", get(|| async {}))
+            .layer(from_fn_with_state(
+                state.clone(),
+                session_middleware_no_csrf::<GenericAuthenticatedSession>,
+            ));
+    let customer_authenticated_no_csrf = Router::new()
         .route("/check/customer", get(|| async {}))
         .layer(from_fn_with_state(
             state.clone(),
-            session_middleware::<CustomerSession>,
+            session_middleware_no_csrf::<CustomerSession>,
         ));
-    let admin_authenticated =
+    let admin_authenticated_no_csrf =
         Router::new()
             .route("/check/admin", get(|| async {}))
             .layer(from_fn_with_state(
                 state.clone(),
-                session_middleware::<AdministratorSession>,
+                session_middleware_no_csrf::<AdministratorSession>,
             ));
     let pre_authenticated = Router::new()
         .route("/2fa", get(get_mfa_methods))
@@ -59,9 +65,10 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
 
     unauthenticated
         .merge(pre_authenticated)
+        .merge(authenticated_no_csrf)
         .merge(authenticated)
-        .merge(customer_authenticated)
-        .merge(admin_authenticated)
+        .merge(customer_authenticated_no_csrf)
+        .merge(admin_authenticated_no_csrf)
 }
 
 #[derive(Serialize)]
@@ -82,7 +89,7 @@ async fn list_methods() -> Json<GetMethodsResponse> {
 /// A request to /auth/login.
 struct AuthenticateRequest {
     /// The email provided at login.
-    pub email: String,
+    pub email: EmailAddress,
     /// The credential provided at login.
     pub credential: auth::PrimaryAuthenticationMethod,
 }
@@ -100,39 +107,91 @@ async fn logout(
     cookies: CookieJar,
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
-) -> Result<CookieJar, StatusCode> {
+) -> Result<CookieJar, HttpError> {
     session.delete(&mut state.session_store.clone()).await?;
-    Ok(cookies.remove(Cookie::from("SESSION")))
+    Ok(cookies
+        .remove(Cookie::from("session"))
+        .remove(Cookie::from("session_csrf")))
 }
 
-/// Login using a credential method, and set a SESSION cookie.
+/// Login using a credential method, and set a session cookie.
 async fn login(
+    headers: HeaderMap,
     cookies: CookieJar,
     State(state): State<AppState>,
     Json(body): Json<AuthenticateRequest>,
-) -> Result<(CookieJar, Json<AuthenticateResponse>), StatusCode> {
+) -> Result<(CookieJar, Json<AuthenticateResponse>), HttpError> {
+    let client_ip = headers
+        .get("x-real-ip")
+        .ok_or_else(|| {
+            eprintln!("X-Real-IP header not set, I should be running behind a reverse proxy.");
+            HttpError::new(
+                StatusCode::BAD_REQUEST,
+                Some(String::from("X-Real-IP not set")),
+            )
+        })?
+        .to_str()
+        .map_err(|err| {
+            eprintln!("Failed to parse X-Real-IP header value: {err}");
+            HttpError::new(
+                StatusCode::BAD_REQUEST,
+                Some(String::from("X-Real-IP value unparseable")),
+            )
+        })?;
+    if state
+        .session_store
+        .clone()
+        .bruteforce_timeout(client_ip)
+        .await?
+    {
+        eprintln!(
+            "Client {client_ip} is rate-limited for suspected bruteforce authentication attempt."
+        );
+        return Err(HttpError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            Some(String::from("Too many authentication attempts.")),
+        ));
+    }
     let mut session_store = state.session_store.clone();
-    let outcome =
-        auth::authenticate(&body.email, body.credential, &state.db, &mut session_store).await?;
-    let (mfa_required, is_admin, token) = match outcome {
+    let outcome = auth::authenticate(
+        body.email.clone(),
+        body.credential,
+        &state.db,
+        &mut session_store,
+    )
+    .await?;
+    let (mfa_required, is_admin, token, csrf) = match outcome {
         auth::AuthenticationOutcome::Failure => {
-            eprintln!("Failed authentication as {}", body.email);
-            return Err(StatusCode::UNAUTHORIZED);
+            eprintln!("Failed authentication attempt as {}", body.email);
+            return Err(HttpError::new(
+                StatusCode::UNAUTHORIZED,
+                Some(String::from("Authentication failed")),
+            ));
         }
         auth::AuthenticationOutcome::SuccessAdministrative(session) => {
-            (false, Some(true), session.token())
+            (false, Some(true), session.token(), session.csrf_token())
         }
-        auth::AuthenticationOutcome::Success(session) => (false, Some(false), session.token()),
-        auth::AuthenticationOutcome::Partial(session) => (true, None, session.token()),
+        auth::AuthenticationOutcome::Success(session) => {
+            (false, Some(false), session.token(), session.csrf_token())
+        }
+        auth::AuthenticationOutcome::Partial(session) => {
+            (true, None, session.token(), session.csrf_token())
+        }
     };
     Ok((
-        cookies.add(
-            Cookie::build(("SESSION", token))
-                .http_only(true)
-                .path("/")
-                .secure(true)
-                .same_site(SameSite::Strict),
-        ),
+        cookies
+            .add(
+                Cookie::build(("session", token))
+                    .http_only(true)
+                    .path("/")
+                    .secure(true)
+                    .same_site(SameSite::Strict),
+            )
+            .add(
+                Cookie::build(("session_csrf", csrf))
+                    .path("/")
+                    .same_site(SameSite::Strict),
+            ),
         Json(AuthenticateResponse {
             mfa_required,
             is_admin,
@@ -151,7 +210,7 @@ struct MfaMethodsResponse {
 async fn get_mfa_methods(
     State(state): State<AppState>,
     Extension(session): Extension<PreAuthenticationSession>,
-) -> Result<Json<MfaMethodsResponse>, StatusCode> {
+) -> Result<Json<MfaMethodsResponse>, HttpError> {
     let db_conn = state.db;
     let methods = auth::list_mfa_methods(session.user_id(), &db_conn).await?;
     Ok(Json(MfaMethodsResponse { methods }))
@@ -176,63 +235,43 @@ async fn authenticate_2fa(
     State(state): State<AppState>,
     Extension(session): Extension<PreAuthenticationSession>,
     Json(body): Json<MfaAuthenticateRequest>,
-) -> Result<(CookieJar, Json<MfaAuthenticateResponse>), StatusCode> {
+) -> Result<(CookieJar, Json<MfaAuthenticateResponse>), HttpError> {
     let mut session_store = state.session_store.clone();
     let outcome =
         auth::authenticate_2fa(session, body.credential, &state.db, &mut session_store).await?;
-    match outcome {
-        auth::AuthenticationOutcome2fa::Failure => Err(StatusCode::UNAUTHORIZED),
-        auth::AuthenticationOutcome2fa::Success(new_session) => Ok((
-            cookies.add(
-                Cookie::build(("SESSION", new_session.token()))
-                    .http_only(true)
-                    .path("/")
-                    .secure(true)
-                    .same_site(SameSite::Strict),
-            ),
-            Json(MfaAuthenticateResponse { is_admin: false }),
+    let (token, csrf, is_admin) = match outcome {
+        auth::AuthenticationOutcome2fa::Failure => Err(HttpError::new(
+            StatusCode::UNAUTHORIZED,
+            Some(String::from("Two-factor authentication failed")),
         )),
-        auth::AuthenticationOutcome2fa::SuccessAdministrative(new_session) => Ok((
-            cookies.add(
-                Cookie::build(("SESSION", new_session.token()))
-                    .http_only(true)
-                    .path("/")
-                    .secure(true)
-                    .same_site(SameSite::Strict),
-            ),
-            Json(MfaAuthenticateResponse { is_admin: true }),
-        )),
-    }
-}
-
-impl From<StorageError> for StatusCode {
-    fn from(value: StorageError) -> Self {
-        eprintln!("Storage error in route handler: {value}");
-        Self::INTERNAL_SERVER_ERROR
-    }
-}
-
-impl From<sessions::errors::SessionPromotionError> for StatusCode {
-    fn from(value: sessions::errors::SessionPromotionError) -> Self {
-        match value {
-            sessions::errors::SessionPromotionError::InvalidSession => {
-                eprintln!(
-                    "Session expired immediately after creation. Server is likely misconfigured."
-                );
-                Self::INTERNAL_SERVER_ERROR // not a 401, this is probably on us
-            }
-            sessions::errors::SessionPromotionError::StorageError(error) => error.into(),
-            sessions::errors::SessionPromotionError::NotAuthenticated => {
-                eprintln!("Session is not authenticated.");
-                Self::UNAUTHORIZED
-            }
+        auth::AuthenticationOutcome2fa::Success(new_session) => {
+            Ok((new_session.token(), new_session.csrf_token(), false))
         }
-    }
+        auth::AuthenticationOutcome2fa::SuccessAdministrative(new_session) => {
+            Ok((new_session.token(), new_session.csrf_token(), true))
+        }
+    }?;
+    Ok((
+        cookies
+            .add(
+                Cookie::build(("session", token))
+                    .http_only(true)
+                    .path("/")
+                    .secure(true)
+                    .same_site(SameSite::Strict),
+            )
+            .add(
+                Cookie::build(("session_csrf", csrf))
+                    .path("/")
+                    .same_site(SameSite::Strict),
+            ),
+        Json(MfaAuthenticateResponse { is_admin }),
+    ))
 }
 
-impl From<sessions::errors::SessionStorageError> for StatusCode {
+impl From<sessions::errors::SessionStorageError> for HttpError {
     fn from(err: sessions::errors::SessionStorageError) -> Self {
         eprintln!("Storage error while accessing session store: {err}");
-        Self::INTERNAL_SERVER_ERROR
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string()))
     }
 }

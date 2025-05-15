@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE appuser SET email = $1,\n            forename = pgp_sym_encrypt($2, $6),\n            surname = pgp_sym_encrypt($3, $6),\n            address = pgp_sym_encrypt($4, $6) WHERE id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9beed1297c0ce6238a2e64ca40ff97568095b775af0f5dea8081dcf32faa4641"
+}

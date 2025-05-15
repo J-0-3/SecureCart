@@ -11,5 +11,5 @@ RUN tsc
 FROM nginx AS server
 COPY healthcheck.sh /bin/healthcheck.sh
 RUN chmod +x /bin/healthcheck.sh
-COPY --from=builder /app/src/*.html /usr/share/nginx/html/
-COPY --from=builder /app/src/js /usr/share/nginx/html/js
+COPY --from=builder /app/src/ /usr/share/nginx/html/
+RUN rm -rf /app/src/ts # prevent accidentally leaking TS source in case of comments etc

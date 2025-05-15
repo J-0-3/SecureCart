@@ -25,7 +25,11 @@ use tokio::net::TcpListener;
 #[tokio::main]
 async fn main() {
     let s3 = AmazonS3Builder::new()
-        .with_endpoint(format!("http://{}:9000", &*constants::s3::S3_HOST))
+        .with_endpoint(format!(
+            "http://{}:{}",
+            &*constants::s3::S3_HOST,
+            &*constants::s3::S3_PORT
+        ))
         .with_bucket_name(&*constants::s3::S3_BUCKET)
         .with_access_key_id(&*constants::s3::S3_ACCESS_KEY)
         .with_secret_access_key(&*constants::s3::S3_SECRET_KEY)
@@ -47,10 +51,12 @@ async fn main() {
     let app = axum::Router::new()
         .route("/", get(root))
         .nest("/auth", routes::auth::create_router(&state))
-        .nest("/onboard", routes::registration::create_router(&state))
+        .nest("/registration", routes::registration::create_router(&state))
         .nest("/products", routes::products::create_router(&state))
         .nest("/orders", routes::orders::create_router(&state))
         .nest("/webhook", routes::webhook::create_router(&state))
+        .nest("/checkout", routes::checkout::create_router(&state))
+        .nest("/users", routes::users::create_router(&state))
         .with_state(state);
     let listener = TcpListener::bind("0.0.0.0:80")
         .await

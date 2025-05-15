@@ -7,18 +7,17 @@ use axum::{
     Extension, Json, Router,
 };
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::{
-    db::{
-        errors::DatabaseError,
-        models::product::{Product, ProductInsert},
-    },
-    middleware::auth::session_middleware,
+    db::models::product::{Product, ProductInsert},
+    middleware::session::session_middleware,
     services::{
         products::{self, ProductSearchParameters, ProductUpdate, ProductVisibilityScope},
         sessions::{AdministratorSession, GenericAuthenticatedSession},
     },
     state::AppState,
+    utils::httperror::HttpError,
 };
 
 /// Create a router for routes under the product service.
@@ -56,7 +55,7 @@ async fn search_products(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
     Query(params): Query<ProductSearchParameters>,
-) -> Result<Json<ListProductsResponse>, StatusCode> {
+) -> Result<Json<ListProductsResponse>, HttpError> {
     let products = match session {
         GenericAuthenticatedSession::Customer(_) => {
             products::search_products::<{ ProductVisibilityScope::LISTED_ONLY }>(&state.db, &params)
@@ -76,8 +75,8 @@ async fn search_products(
 async fn get_product(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
-    Path(product_id): Path<u32>,
-) -> Result<Json<Product>, StatusCode> {
+    Path(product_id): Path<Uuid>,
+) -> Result<Json<Product>, HttpError> {
     let product = match session {
         GenericAuthenticatedSession::Customer(_) => {
             products::retrieve_product::<{ ProductVisibilityScope::LISTED_ONLY }>(
@@ -99,24 +98,24 @@ async fn get_product(
 async fn create_product(
     State(state): State<AppState>,
     Json(body): Json<ProductInsert>,
-) -> Result<Json<Product>, StatusCode> {
+) -> Result<Json<Product>, HttpError> {
     Ok(Json(products::create_product(body, &state.db).await?))
 }
 
 /// Delete a product.
 async fn delete_product(
     State(state): State<AppState>,
-    Path(product_id): Path<u32>,
-) -> Result<(), StatusCode> {
+    Path(product_id): Path<Uuid>,
+) -> Result<(), HttpError> {
     Ok(products::delete_product(product_id, &state.db).await?)
 }
 
 /// Update a product.
 async fn update_product(
     State(state): State<AppState>,
-    Path(product_id): Path<u32>,
+    Path(product_id): Path<Uuid>,
     Json(body): Json<ProductUpdate>,
-) -> Result<(), StatusCode> {
+) -> Result<(), HttpError> {
     Ok(products::update_product(product_id, body, &state.db).await?)
 }
 
@@ -132,9 +131,9 @@ struct AddImageResponse {
 /// natural way to do a file upload over HTTP.
 async fn add_product_image(
     State(state): State<AppState>,
-    Path(product_id): Path<u32>,
+    Path(product_id): Path<Uuid>,
     mut data: Multipart,
-) -> Result<Json<AddImageResponse>, StatusCode> {
+) -> Result<Json<AddImageResponse>, HttpError> {
     loop {
         let Some(field) = data.next_field().await.map_err(|err| {
             eprintln!("Error while processing multipart data: {err}");
@@ -142,11 +141,17 @@ async fn add_product_image(
         })?
         else {
             eprintln!("Image was not included in multipart form data.");
-            return Err(StatusCode::UNPROCESSABLE_ENTITY);
+            return Err(HttpError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some(String::from("Image field is missing from form data")),
+            ));
         };
         if field.name().ok_or_else(|| {
-            eprintln!("Multipart field missing name");
-            StatusCode::UNPROCESSABLE_ENTITY
+            eprintln!("Multipart field missing name in request to add image");
+            HttpError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some(String::from("A multipart form field is missing a name")),
+            )
         })? == "image"
         {
             let result = products::add_image(
@@ -156,7 +161,7 @@ async fn add_product_image(
                     .await
                     .map_err(|err| {
                         eprintln!("Multipart form image data unprocessable: {err}");
-                        StatusCode::UNPROCESSABLE_ENTITY
+                        HttpError::new(StatusCode::UNPROCESSABLE_ENTITY, Some(err.to_string()))
                     })?
                     .to_vec(),
                 &state.db,
@@ -171,8 +176,8 @@ async fn add_product_image(
 /// Delete (disassociate) an image from a product.
 async fn delete_product_image(
     State(state): State<AppState>,
-    Path((product_id, path)): Path<(u32, String)>,
-) -> Result<(), StatusCode> {
+    Path((product_id, path)): Path<(Uuid, String)>,
+) -> Result<(), HttpError> {
     Ok(products::delete_image(product_id, &path, &state.db).await?)
 }
 
@@ -186,8 +191,8 @@ struct ListImagesResponse {
 /// List URIs for all images associated with a product.
 async fn list_product_images(
     State(state): State<AppState>,
-    Path(product_id): Path<u32>,
-) -> Result<Json<ListImagesResponse>, StatusCode> {
+    Path(product_id): Path<Uuid>,
+) -> Result<Json<ListImagesResponse>, HttpError> {
     Ok(Json(
         products::list_images(product_id, &state.db)
             .await
@@ -195,60 +200,67 @@ async fn list_product_images(
     ))
 }
 
-impl From<DatabaseError> for StatusCode {
-    fn from(err: DatabaseError) -> Self {
-        eprintln!("Database error in product handler: {err}");
-        Self::INTERNAL_SERVER_ERROR
-    }
-}
-
-impl From<products::errors::ProductDeleteError> for StatusCode {
+impl From<products::errors::ProductDeleteError> for HttpError {
     fn from(err: products::errors::ProductDeleteError) -> Self {
         match err {
             products::errors::ProductDeleteError::DatabaseError(error) => error.into(),
-            products::errors::ProductDeleteError::NonExistent => {
-                eprintln!("Attempted to delete a product which does not exist");
-                Self::NOT_FOUND
+            products::errors::ProductDeleteError::NonExistent(product_id) => {
+                eprintln!("Attempted to delete product {product_id}, which does not exist");
+                Self::new(
+                    StatusCode::NOT_FOUND,
+                    Some(format!("Product {product_id} not found")),
+                )
             }
         }
     }
 }
 
-impl From<products::errors::ProductUpdateError> for StatusCode {
+impl From<products::errors::ProductUpdateError> for HttpError {
     fn from(err: products::errors::ProductUpdateError) -> Self {
         match err {
             products::errors::ProductUpdateError::DatabaseError(error) => error.into(),
-            products::errors::ProductUpdateError::NonExistent => {
-                eprintln!("Attempted to update a product which does not exist");
-                Self::NOT_FOUND
+            products::errors::ProductUpdateError::NonExistent(product_id) => {
+                eprintln!("Attempted to update product {product_id}, which does not exist");
+                Self::new(
+                    StatusCode::NOT_FOUND,
+                    Some(format!("Product {product_id} not found")),
+                )
             }
         }
     }
 }
 
-impl From<products::errors::AddImageError> for StatusCode {
+impl From<products::errors::AddImageError> for HttpError {
     fn from(err: products::errors::AddImageError) -> Self {
         match err {
             products::errors::AddImageError::DatabaseError(error) => error.into(),
             products::errors::AddImageError::MediaStoreError(error) => {
                 eprintln!("Error in media object store while adding image: {error}");
-                Self::INTERNAL_SERVER_ERROR
+                Self::from(StatusCode::INTERNAL_SERVER_ERROR)
             }
-            products::errors::AddImageError::NonExistent => {
-                eprintln!("Attempted to add an image to a product which does not exist");
-                Self::NOT_FOUND
+            products::errors::AddImageError::NonExistent(product_id) => {
+                eprintln!("Attempted to add an image to product {product_id} which does not exist");
+                Self::new(
+                    StatusCode::NOT_FOUND,
+                    Some(format!("Product {product_id} not found.")),
+                )
             }
         }
     }
 }
 
-impl From<products::errors::ImageDeleteError> for StatusCode {
+impl From<products::errors::ImageDeleteError> for HttpError {
     fn from(err: products::errors::ImageDeleteError) -> Self {
         match err {
             products::errors::ImageDeleteError::DatabaseError(error) => error.into(),
-            products::errors::ImageDeleteError::NonExistentImage => {
-                eprintln!("Attempted to delete an image which does not exist");
-                Self::NOT_FOUND
+            products::errors::ImageDeleteError::NonExistentImage(path, product_id) => {
+                eprintln!(
+                    "Attempted to delete non-existent image at {path} from product {product_id}"
+                );
+                Self::new(
+                    StatusCode::NOT_FOUND,
+                    Some(format!("Image {path} not found on product {product_id}")),
+                )
             }
         }
     }

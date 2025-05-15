@@ -3,14 +3,16 @@ use crate::{
     db::{
         self,
         models::{
-            appuser::{AppUser, AppUserRole},
+            appuser::{AppUser, AppUserRole, AppUserSearchParameters},
             password::Password,
             totp::Totp,
         },
     },
     services::sessions::{self, CustomerSession, PreAuthenticationSession},
+    utils::email::EmailAddress,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::sessions::AdministratorSession;
 
@@ -25,7 +27,7 @@ pub enum PrimaryAuthenticationMethod {
 }
 
 async fn do_password_authentication(
-    user_id: u32,
+    user_id: Uuid,
     password: &str,
     db_conn: &db::ConnectionPool,
 ) -> Result<bool, db::errors::DatabaseError> {
@@ -38,7 +40,7 @@ impl PrimaryAuthenticationMethod {
     /// Authenticate using this authentication method.
     async fn authenticate(
         self,
-        user_id: u32,
+        user_id: Uuid,
         db_conn: &db::ConnectionPool,
     ) -> Result<bool, db::errors::DatabaseError> {
         match self {
@@ -84,13 +86,20 @@ pub enum AuthenticationOutcome {
 /// is recommended. If the session is not authenticated, then further action
 /// (most likely MFA) is required.
 pub async fn authenticate(
-    email: &str,
+    email: EmailAddress,
     credential: PrimaryAuthenticationMethod,
     db_conn: &db::ConnectionPool,
     session_store_conn: &mut sessions::store::Connection,
 ) -> Result<AuthenticationOutcome, super::errors::StorageError> {
-    let res = AppUser::select_by_email(email, db_conn).await?;
-    let Some(user) = res else {
+    let mut res = AppUser::search(
+        AppUserSearchParameters {
+            email: Some(email),
+            role: None,
+        },
+        db_conn,
+    )
+    .await?;
+    let Some(user) = res.pop() else {
         return Ok(AuthenticationOutcome::Failure);
     };
     if !credential.authenticate(user.id(), db_conn).await? {
@@ -114,7 +123,7 @@ pub async fn authenticate(
 
 /// List 2fa methods available for a user
 pub async fn list_mfa_methods(
-    user_id: u32,
+    user_id: Uuid,
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<MfaAuthenticationMethod>, super::errors::StorageError> {
     let mut methods = vec![];
@@ -129,7 +138,7 @@ pub async fn list_mfa_methods(
 
 /// Validate a 2fa credential for a user.
 async fn validate_2fa(
-    user_id: u32,
+    user_id: Uuid,
     method: MfaAuthenticationMethod,
     db_conn: &db::ConnectionPool,
 ) -> Result<bool, super::errors::StorageError> {

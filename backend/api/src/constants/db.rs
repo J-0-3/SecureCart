@@ -7,14 +7,14 @@ use std::sync::LazyLock;
 pub static DB_HOST: LazyLock<String> =
     LazyLock::new(|| var("DB_HOST").expect("DB_HOST not provided in environment variables"));
 
-/// The username to authenticate to the database server with.
-pub static DB_USERNAME: LazyLock<String> = LazyLock::new(|| {
-    var("DB_USERNAME").expect("DB_USERNAME not provided in environment variables")
-});
-
 /// The database to connect to on the database server.
 pub static DB_DATABASE: LazyLock<String> = LazyLock::new(|| {
     var("DB_DATABASE").expect("DB_DATABASE not provided in environment variables")
+});
+
+/// The username to authenticate to the database server with.
+pub static DB_USERNAME: LazyLock<String> = LazyLock::new(|| {
+    var("DB_USERNAME").expect("DB_USERNAME not provided in environment variables")
 });
 
 /// The password to authenticate to the database with.

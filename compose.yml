@@ -1,0 +1,190 @@
+# Development service configuration. All configuration and secret values are hardcoded. Insecure, never expose publically.
+services:
+  db:
+    build: backend/db
+    environment:
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+      - POSTGRES_DB=${DB_DATABASE}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USERNAME}", "-d", "${DB_DATABASE}"]
+      interval: 30s
+      start_interval: 5s
+      start_period: 30s
+      retries: 5
+    secrets:
+      - db_password
+
+  db-setup:
+    build: backend/db-setup
+    environment:
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+    secrets:
+      - db_password
+      - db_encryption_key
+      - admin_email
+      - admin_password
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: false
+
+  redis:
+    image: redis:latest
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+
+  api:
+    build: 
+      context: backend/api
+      args:
+        - ENABLE_STRIPE=${ENABLE_STRIPE}
+    environment:
+      - DB_HOST=db
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD_DOCKER_SECRET=db_password
+      - DB_ENCRYPTION_KEY_DOCKER_SECRET=db_encryption_key
+      - REDIS_HOST=redis
+      - S3_HOST=minio
+      - S3_PORT=9000
+      - S3_BUCKET=media
+      - S3_ACCESS_KEY_DOCKER_SECRET=minio_access_key
+      - S3_SECRET_KEY_DOCKER_SECRET=minio_secret_key
+      - S3_EXTERNAL_URI=
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_SECRET_KEY_DOCKER_SECRET=stripe_secret_key
+      - STRIPE_WEBHOOK_SECRET_DOCKER_SECRET=stripe_webhook_secret
+      - API_URI_PREFIX=/api
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      redis:
+        condition: service_healthy
+        restart: true
+      minio-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    secrets:
+      - stripe_secret_key
+      - stripe_webhook_secret
+      - minio_secret_key
+      - minio_access_key
+      - db_password
+      - db_encryption_key
+  
+  minio:
+    build: backend/minio
+    ports:
+      - "127.0.0.1:9001:9001"
+    environment:
+      - MINIO_ROOT_USER_FILE=/run/secrets/minio_root_user
+      - MINIO_ROOT_PASSWORD_FILE=/run/secrets/minio_root_password
+    command: server --console-address ":9001" /data
+    healthcheck: 
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    secrets:
+      - minio_root_user
+      - minio_root_password
+
+  minio-setup:
+    build: 
+      context: backend/minio-setup
+      args:
+        - MINIO_HOST=minio
+    environment:
+      - BUCKET_NAME=media
+      # these will default to docker secret paths (see backend/minio-setup/startup.sh)
+      - ROOT_USER=
+      - ROOT_PASSWORD=
+      - ACCESS_KEY=
+      - SECRET_KEY=
+    depends_on:
+      minio:
+        condition: service_healthy
+    secrets:
+      - minio_root_user
+      - minio_root_password
+      - minio_access_key
+      - minio_secret_key
+      
+  frontend:
+    build: frontend
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    develop:
+      watch:
+        - action: sync
+          path: frontend/src
+          target: /usr/share/nginx/html/
+
+  nginx:
+    build: nginx
+    ports:
+      - 8443:8443
+    healthcheck:
+      test: ["CMD", "/bin/healthcheck.sh"]
+      interval: 30s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s
+    depends_on:
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync+restart
+          path: nginx/nginx.conf
+          target: /etc/nginx/nginx.conf
+
+  stripe-webhook-forward-local: # used to forward stripe events to localhost for testing
+    build: backend/stripe-forward
+    profiles:
+      - stripe-webhook
+    secrets:
+      - stripe_secret_key
+
+secrets:
+  stripe_secret_key:
+    environment: STRIPE_SECRET_KEY # this can be empty, but it must be set
+  stripe_webhook_secret:
+    environment: STRIPE_WEBHOOK_SECRET
+  db_password:
+    environment: DB_PASSWORD
+  db_encryption_key:
+    environment: DB_ENCRYPTION_KEY
+  admin_email:
+    environment: ADMIN_EMAIL
+  admin_password:
+    environment: ADMIN_PASSWORD
+  minio_root_user:
+    environment: MINIO_ROOT_USER
+  minio_root_password:
+    environment: MINIO_ROOT_PASSWORD
+  minio_access_key: 
+    environment: MINIO_ACCESS_KEY
+  minio_secret_key:
+    environment: MINIO_SECRET_KEY
+

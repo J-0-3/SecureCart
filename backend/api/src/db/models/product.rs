@@ -1,8 +1,9 @@
 //! Models mapping to the product database table. Represents a purchaseable
 //! product in the store.
+use crate::db::{errors::DatabaseError, ConnectionPool};
 use serde::{Deserialize, Serialize};
 use sqlx::{query, query_as, FromRow, QueryBuilder};
-use crate::db::{ConnectionPool, errors::DatabaseError};
+use uuid::Uuid;
 
 /// INSERT model for a `product`. Used ONLY when adding a new product.
 #[derive(Deserialize)]
@@ -12,7 +13,7 @@ pub struct ProductInsert {
     /// A description of the product.
     pub description: String,
     /// Whether the product is in stock (should be listed).
-    listed: bool, 
+    listed: bool,
     /// The price of the product in pennies (GBP).
     price: i64,
 }
@@ -22,7 +23,7 @@ pub struct ProductInsert {
 #[derive(Serialize, FromRow, Clone)]
 pub struct Product {
     /// The product's ID primary key.
-    id: i64,
+    id: Uuid,
     /// The name of the product.
     pub name: String,
     /// A description of the product.
@@ -32,7 +33,7 @@ pub struct Product {
     /// The price of the product in pennies (GBP).
     price: i64,
     /// A list of image paths associated with this product.
-    pub images: Vec<String>
+    pub images: Vec<String>,
 }
 
 impl ProductInsert {
@@ -45,18 +46,10 @@ impl ProductInsert {
             price: i64::from(price),
         }
     }
-    /// Get whether the product should be listed.
-    pub const fn is_listed(&self) -> bool {
-        self.listed
-    }
-    /// Get the price of the product in pennies (GBP).
-    pub fn price(&self) -> u32 {
-        u32::try_from(self.price).expect("Price value is invalid within model. This should never happen.")
-    }
     /// Store this INSERT model in the database and return a complete `Product` model.
     pub async fn store(self, db_client: &ConnectionPool) -> Result<Product, DatabaseError> {
         Ok(query_as!(
-            Product, 
+            Product,
             r#"INSERT INTO product (name, description, listed, price) VALUES ($1, $2, $3, $4) RETURNING id, name, description, listed, price, '{}'::text[] AS "images!""#,
             self.name, self.description, self.listed, self.price
         ).fetch_one(db_client).await?)
@@ -72,38 +65,53 @@ pub struct ProductSearchParameters {
     /// The maximum price bound. Will match only products which cost less than this.
     pub price_max: Option<u32>,
     /// Whether the products are listed.
-    pub listed: Option<bool>
+    pub listed: Option<bool>,
 }
 
 impl Product {
     /// Select a `Product` from the database by its ID.
-    pub async fn select_one(id: u32, db_client: &ConnectionPool) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(Self, r#"SELECT id, name, description, listed, price,
+    pub async fn select_one(
+        id: Uuid,
+        db_client: &ConnectionPool,
+    ) -> Result<Option<Self>, DatabaseError> {
+        Ok(query_as!(
+            Self,
+            r#"SELECT id, name, description, listed, price,
                 array_remove(array_agg(path), NULL) AS "images!"
                 FROM product LEFT JOIN product_image ON product.id = product_image.product_id
-                WHERE id = $1 GROUP BY id"#, i64::from(id))
-            .fetch_optional(db_client)
-            .await?)
+                WHERE id = $1 GROUP BY id"#,
+            id
+        )
+        .fetch_optional(db_client)
+        .await?)
     }
     /// Retrieve all `Product`s stored in the database.
     pub async fn select_all(db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
-        Ok(query_as!(Self, r#"SELECT id, name, description, listed, price,
+        Ok(query_as!(
+            Self,
+            r#"SELECT id, name, description, listed, price,
                 array_remove(array_agg(path), NULL) AS "images!"
                 FROM product LEFT JOIN product_image ON product.id = product_image.product_id
-                GROUP BY id"#)
-            .fetch_all(db_client)
-            .await?)
+                GROUP BY id"#
+        )
+        .fetch_all(db_client)
+        .await?)
     }
-    
+
     /// Return all `Product`s matching a given set of search parameters (see
     /// `ProductSearchParameters`). If all parameters are None, this is the
     /// same as calling `select_all`.
-    pub async fn search(params: &ProductSearchParameters ,db_client: &ConnectionPool) -> Result<Vec<Self>, DatabaseError> {
+    pub async fn search(
+        params: ProductSearchParameters,
+        db_client: &ConnectionPool,
+    ) -> Result<Vec<Self>, DatabaseError> {
         // 1=1 is used to make adding additional criteria simpler, since they will always
         // use AND.
-        let mut query = QueryBuilder::new(r#"SELECT id, name, description, listed, price,
+        let mut query = QueryBuilder::new(
+            r#"SELECT id, name, description, listed, price,
             array_remove(array_agg(path), NULL) AS "images"
-            FROM product LEFT JOIN product_image ON product.id = product_image.product_id WHERE 1=1"#);
+            FROM product LEFT JOIN product_image ON product.id = product_image.product_id WHERE 1=1"#,
+        );
         if let Some(ref name) = params.name {
             query.push(" AND name LIKE ");
             // We don't strictly need to do this, the query is already parameterised
@@ -114,7 +122,7 @@ impl Product {
                 .replace('\\', "\\\\")
                 .replace('%', "\\%")
                 .replace('_', "\\_");
-            query.push_bind(format!("{escaped_name}%"));  
+            query.push_bind(format!("{escaped_name}%"));
             query.push(" ESCAPE '\\' ");
         }
         if let Some(min) = params.price_min {
@@ -157,15 +165,22 @@ impl Product {
         u32::try_from(self.price).expect("Price value in database is out of allowed range")
     }
     /// Get this product's ID primary key.
-    pub fn id(&self) -> u32 {
-        u32::try_from(self.id).expect("Product ID in database out of allowed range")
+    pub const fn id(&self) -> Uuid {
+        self.id
     }
     /// Update the corresponding database record to match this model's state.
     pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
         Ok(query!(
-            "UPDATE product SET name = $1, description = $2, listed = $3, price = $4 WHERE id = $5", 
-            self.name, self.description, self.listed, self.price, self.id
-        ).execute(db_client).await.map(|_| ())?)
+            "UPDATE product SET name = $1, description = $2, listed = $3, price = $4 WHERE id = $5",
+            self.name,
+            self.description,
+            self.listed,
+            self.price,
+            self.id
+        )
+        .execute(db_client)
+        .await
+        .map(|_| ())?)
     }
     /// Delete the corresponding record from the database. Also consumes the
     /// model for the sake of consistency.

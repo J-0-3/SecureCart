@@ -5,7 +5,7 @@
     "columns": [],
     "parameters": {
       "Left": [
-        "Int8",
+        "Uuid",
         "Timestamp",
         "Int8",
         {
@@ -13,14 +13,14 @@
             "name": "app_order_status",
             "kind": {
               "Enum": [
-                "Unpaid",
+                "Unconfirmed",
                 "Confirmed",
                 "Fulfilled"
               ]
             }
           }
         },
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": []

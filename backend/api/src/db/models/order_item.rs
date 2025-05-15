@@ -1,24 +1,25 @@
 use sqlx::query_as;
+use uuid::Uuid;
 
 use crate::db::{errors::DatabaseError, ConnectionPool};
 
 pub struct OrderItemInsert {
-    product_id: i64,
-    order_id: i64,
+    product_id: Uuid,
+    order_id: Uuid,
     count: i64,
 }
 
 pub struct OrderItem {
-    product_id: i64,
-    order_id: i64,
+    product_id: Uuid,
+    order_id: Uuid,
     count: i64,
 }
 
 impl OrderItemInsert {
-    pub fn new(product_id: u32, order_id: u32, count: u32) -> Self {
+    pub fn new(product_id: Uuid, order_id: Uuid, count: u32) -> Self {
         Self {
-            product_id: i64::from(product_id),
-            order_id: i64::from(order_id),
+            product_id,
+            order_id,
             count: i64::from(count),
         }
     }
@@ -37,22 +38,22 @@ impl OrderItemInsert {
 
 impl OrderItem {
     pub async fn select_all(
-        order_id: u32,
+        order_id: Uuid,
         db_client: &ConnectionPool,
     ) -> Result<Vec<Self>, DatabaseError> {
         Ok(query_as!(
             Self,
             "SELECT * FROM order_item WHERE order_id = $1",
-            i64::from(order_id)
+            order_id
         )
         .fetch_all(db_client)
         .await?)
     }
-    pub fn product_id(&self) -> u32 {
-        u32::try_from(self.product_id).expect("Product ID in OrderItem exceeds u32 range.")
+    pub const fn product_id(&self) -> Uuid {
+        self.product_id
     }
-    pub fn order_id(&self) -> u32 {
-        u32::try_from(self.order_id).expect("Order ID in OrderItem exceeds u32 range.")
+    pub const fn order_id(&self) -> Uuid {
+        self.order_id
     }
     pub fn count(&self) -> u32 {
         u32::try_from(self.count).expect("Count in OrderItem exceeds u32 range.")

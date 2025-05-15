@@ -8,10 +8,11 @@ use crate::{
 };
 pub mod store;
 use core::fmt::Write as _;
-use store::{Connection, SessionInfo};
+use store::{AuthenticatedSessionData, Connection, SessionInfo};
+use uuid::Uuid;
 
-/// Generates a new 24-byte session token using a CSPRNG.
-fn generate_session_token() -> String {
+/// Generates a new 24-byte token using a CSPRNG.
+fn generate_token() -> String {
     let mut token_buf: [u8; 24] = [0; 24];
     getrandom::fill(&mut token_buf).expect("Error getting OS random. Critical, aborting.");
     token_buf
@@ -47,6 +48,8 @@ pub trait SessionTrait: Send + Sync + Clone + Sized {
         self,
         session_store_conn: &mut store::Connection,
     ) -> Result<(), errors::SessionStorageError>;
+    /// Get this session's CSRF token.
+    fn csrf_token(&self) -> String;
 }
 
 /// A session which is guaranteed to have been fully authenticated. Can be
@@ -103,10 +106,11 @@ impl SessionTrait for GenericAuthenticatedSession {
         let session_opt =
             BaseSession::get(token, store::SessionType::Authenticated, session_store_conn).await?;
         Ok(session_opt.map(|session| {
-            let (_, is_admin) = session.info().as_auth().expect(
+            let session_info = session.info();
+            let auth_session_info = session_info.as_auth().expect(
                 "Requested authenticated session, got something else. Bug/Redis is corrupted.",
             );
-            if is_admin {
+            if auth_session_info.admin {
                 Self::Administrator(AdministratorSession { session })
             } else {
                 Self::Customer(CustomerSession { session })
@@ -126,6 +130,24 @@ impl SessionTrait for GenericAuthenticatedSession {
             .delete(&self.token(), store::SessionType::Authenticated)
             .await
     }
+    fn csrf_token(&self) -> String {
+        let (Self::Customer(CustomerSession {
+            session: BaseSession { session_info, .. },
+        })
+        | Self::Administrator(AdministratorSession {
+            session: BaseSession { session_info, .. },
+        })) = self;
+        session_info.csrf_token()
+    }
+}
+
+impl GenericAuthenticatedSession {
+    pub fn user_id(&self) -> Uuid {
+        match *self {
+            Self::Customer(ref customer) => customer.user_id(),
+            Self::Administrator(ref admin) => admin.user_id(),
+        }
+    }
 }
 
 impl SessionTrait for AdministratorSession {
@@ -139,7 +161,7 @@ impl SessionTrait for AdministratorSession {
                     .info()
                     .as_auth()
                     .expect("Got non-authenticated session back from get with SessionType::Authenticated. Major bug in session store.")
-                    .1
+                    .admin
                     .then_some(Self { session })
             }
         ))
@@ -155,16 +177,20 @@ impl SessionTrait for AdministratorSession {
     fn token(&self) -> String {
         self.session.token.clone()
     }
+
+    fn csrf_token(&self) -> String {
+        self.session.info().csrf_token()
+    }
 }
 
 impl AdministratorSession {
     /// Get the user ID of the admin identified by this session.
-    pub fn user_id(&self) -> u32 {
+    pub fn user_id(&self) -> Uuid {
         self.session
             .info()
             .as_auth()
             .expect("Tried to convert a registration session to an authentication session")
-            .0
+            .user_id
     }
 }
 
@@ -177,10 +203,11 @@ impl SessionTrait for CustomerSession {
             BaseSession::get(token, store::SessionType::Authenticated, session_store_conn)
                 .await?
                 .and_then(|sess| {
-                    let (_, is_admin) = sess.info().as_auth().expect(
+                    let session_data = sess.info();
+                    let AuthenticatedSessionData { admin, .. } = *session_data.as_auth().expect(
                         "Malformed authenticated session data returned from store. Unrecoverable.",
                     );
-                    if is_admin {
+                    if admin {
                         None
                     } else {
                         Some(Self { session: sess })
@@ -199,27 +226,34 @@ impl SessionTrait for CustomerSession {
             .delete(&self.token(), store::SessionType::Authenticated)
             .await
     }
+    fn csrf_token(&self) -> String {
+        self.session.info().csrf_token()
+    }
 }
 
 impl CustomerSession {
     /// Get the ID of the user authenticated by this session.
-    pub fn user_id(&self) -> u32 {
+    pub fn user_id(&self) -> Uuid {
         self.session
             .info()
             .as_auth()
             .expect("Attempted to convert a registration session to an authentication session.")
-            .0
+            .user_id
     }
 }
 
 impl PreAuthenticationSession {
     /// Create a new preauthentication session given a user ID.
     pub async fn create(
-        user_id: u32,
+        user_id: Uuid,
         session_store_conn: &mut store::Connection,
     ) -> Result<Self, errors::SessionStorageError> {
+        let csrf = generate_token();
         let session = BaseSession::create(
-            SessionInfo::PreAuthentication { user_id },
+            SessionInfo::PreAuthentication {
+                csrf,
+                data: store::PreAuthenticationSessionData { user_id },
+            },
             session_store_conn,
         )
         .await?;
@@ -238,12 +272,18 @@ impl PreAuthenticationSession {
         session_store_conn
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
+        let csrf = generate_token();
         let session = BaseSession::create(
             SessionInfo::Authenticated {
-                user_id: self.session.info().as_pre_auth().expect(
-                    "Attempted to promote a non-preauthentication session to an authenticated session.",
-                ),
-                admin: false,
+                csrf,
+                data: AuthenticatedSessionData {
+                    user_id: self.session
+                        .info()
+                        .as_pre_auth()
+                        .expect("Attempted to promote a non-preauthentication session to an authenticated one")
+                        .user_id,
+                    admin: false
+                }
             },
             session_store_conn,
         )
@@ -263,12 +303,16 @@ impl PreAuthenticationSession {
         session_store_conn
             .delete(&self.session.token, store::SessionType::PreAuthentication)
             .await?;
+        let csrf = generate_token();
         let session = BaseSession::create(
             SessionInfo::Authenticated {
-                user_id: self.session.info().as_pre_auth().expect(
-                    "Attempted to promote non-preauthentication registration session to an administrative session.",
-                ),
-                admin: true
+                csrf,
+                data: AuthenticatedSessionData {
+                    user_id: self.session.info().as_pre_auth().expect(
+                        "Attempted to promote non-preauthentication registration session to an administrative session.",
+                    ).user_id,
+                    admin: true
+                }
             },
             session_store_conn,
         )
@@ -279,11 +323,12 @@ impl PreAuthenticationSession {
         Ok(AdministratorSession { session })
     }
     /// Get the user ID associated with this session.
-    pub fn user_id(&self) -> u32 {
+    pub fn user_id(&self) -> Uuid {
         self.session
             .info()
             .as_pre_auth()
             .expect("Attempted to convert a registration session to a preauth session.")
+            .user_id
     }
 }
 
@@ -313,6 +358,9 @@ impl SessionTrait for PreAuthenticationSession {
             .delete(&self.token(), store::SessionType::PreAuthentication)
             .await
     }
+    fn csrf_token(&self) -> String {
+        self.session.info().csrf_token()
+    }
 }
 
 impl SessionTrait for RegistrationSession {
@@ -337,6 +385,9 @@ impl SessionTrait for RegistrationSession {
             .delete(&self.token(), store::SessionType::Registration)
             .await
     }
+    fn csrf_token(&self) -> String {
+        self.session.info().csrf_token()
+    }
 }
 
 impl RegistrationSession {
@@ -345,8 +396,12 @@ impl RegistrationSession {
         user_data: AppUserInsert,
         session_store_conn: &mut store::Connection,
     ) -> Result<Self, errors::SessionStorageError> {
+        let csrf = generate_token();
         let session = BaseSession::create(
-            store::SessionInfo::Registration { user_data },
+            store::SessionInfo::Registration {
+                csrf,
+                data: store::RegistrationSessionData { user_data },
+            },
             session_store_conn,
         )
         .await?;
@@ -361,19 +416,20 @@ impl RegistrationSession {
             .info()
             .as_registration()
             .expect("Attempted to convert an authentication session to a registration session.")
+            .user_data
+            .clone()
     }
 }
 
 impl BaseSession {
-    /// Create a new session for a given user. This session is not considered
-    /// fully authenticated until ``Self::authenticate`` is called on it.
+    /// Create a new generic `BaseSession`.
     async fn create(
         session_info: SessionInfo,
         session_store_conn: &mut Connection,
     ) -> Result<Self, errors::SessionStorageError> {
         let token = loop {
             // Loop infinitely and return a token once we successful store the session.
-            let candidate = generate_session_token();
+            let candidate = generate_token();
             match session_store_conn
                 .create(&candidate, session_info.clone())
                 .await
@@ -425,27 +481,4 @@ impl BaseSession {
 /// Errors returned by function within this module.
 pub mod errors {
     pub use super::store::errors::SessionStorageError;
-    use thiserror::Error;
-
-    /// Errors returned when fallibly converting an unauthenticated ``Session`` object
-    /// into an ``AuthenticatedSession`` object.
-    #[derive(Error, Debug)]
-    pub enum SessionPromotionError {
-        /// The session was not previously authenticated (via a call to ``Session::authenticate``).
-        #[error("Attempted to promote an unauthenticated Session to AuthenticatedSession.")]
-        NotAuthenticated,
-        /// The session is invalid, and does not exist in the store.
-        #[error("Attempted to promote an invalid Session to AuthenticatedSession.")]
-        InvalidSession,
-        /// An error occurred while reading/writing the underlying session store.
-        #[error("Storage error while promoting session.")]
-        StorageError(
-            #[from]
-            #[source]
-            SessionStorageError,
-        ),
-    }
-
-    #[derive(Error, Debug)]
-    pub enum SessionAuthenticationError {}
 }

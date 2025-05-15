@@ -6,12 +6,12 @@
       {
         "ordinal": 0,
         "name": "order_id",
-        "type_info": "Int8"
+        "type_info": "Uuid"
       },
       {
         "ordinal": 1,
         "name": "product_id",
-        "type_info": "Int8"
+        "type_info": "Uuid"
       },
       {
         "ordinal": 2,
@@ -21,7 +21,7 @@
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": [
