@@ -8,7 +8,7 @@ RUN if [ -f "/ssl/securecart.crt" ] -a [ -f "/ssl/securecart.key" ]; then \
         /bin/bash /ssl/genkey.sh /ssl/securecart.key /ssl/securecart.crt; \
     fi
 
-FROM nginx
+FROM nginx:1.28.0
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY healthcheck.sh /bin/healthcheck.sh
 RUN chmod +x /bin/healthcheck.sh
