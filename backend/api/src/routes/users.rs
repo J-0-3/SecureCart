@@ -1,3 +1,4 @@
+//! Routes for updating, creating and deleting users, interacts with the users service.
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -23,6 +24,7 @@ use crate::{
     utils::httperror::HttpError,
 };
 
+/// TODO: add documentation
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let authenticated = Router::new()
         .route("/self", get(retrieve_self))
@@ -48,6 +50,7 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
     authenticated.merge(administrator)
 }
 
+/// TODO: add documentation
 async fn retrieve_user(
     State(state): State<AppState>,
     Extension(session): Extension<AdministratorSession>,
@@ -66,6 +69,7 @@ async fn retrieve_user(
     Ok(Json(user))
 }
 
+/// TODO: add documentation
 async fn retrieve_self(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
@@ -79,8 +83,11 @@ async fn retrieve_self(
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 struct Generate2faResponse {
+    /// TODO: add documentation
     qr: String,
+    /// TODO: add documentation
     secret: String,
 }
 
@@ -95,10 +102,15 @@ async fn generate_2fa() -> Result<Json<Generate2faResponse>, HttpError> {
 }
 
 #[derive(Deserialize)]
+/// TODO: add documentation
 struct Set2faRequest {
+    /// TODO: add documentation
     secret: String,
+    /// TODO: add documentation
     code: String,
 }
+
+/// TODO: add documentation
 async fn set_2fa(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
@@ -117,6 +129,7 @@ async fn set_2fa(
             .map(|_| ())?,
     )
 }
+/// TODO: add documentation
 async fn update_self(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
@@ -128,6 +141,7 @@ async fn update_self(
     ))
 }
 
+/// TODO: add documentation
 async fn update_user(
     State(state): State<AppState>,
     Extension(session): Extension<AdministratorSession>,
@@ -168,10 +182,13 @@ async fn update_user(
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 struct UserSearchResponse {
+    /// TODO: add documentation
     users: Vec<AppUser>,
 }
 
+/// TODO: add documentation
 async fn search_users(
     State(state): State<AppState>,
     Query(params): Query<AppUserSearchParameters>,
@@ -181,6 +198,7 @@ async fn search_users(
     }))
 }
 
+/// TODO: add documentation
 async fn promote_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
@@ -189,6 +207,7 @@ async fn promote_user(
     Ok(Json(users::promote_user(user_id, &state.db).await?))
 }
 
+/// TODO: add documentation
 async fn delete_user(
     cookies: CookieJar,
     State(state): State<AppState>,
@@ -258,6 +277,7 @@ async fn delete_user(
     }
 }
 
+/// TODO: add documentation
 async fn delete_self(
     cookies: CookieJar,
     State(state): State<AppState>,
@@ -291,6 +311,7 @@ async fn delete_self(
         .remove(Cookie::from("session_csrf")))
 }
 
+/// TODO: add documentation
 async fn update_credential(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,

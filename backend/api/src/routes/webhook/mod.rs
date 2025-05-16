@@ -1,3 +1,4 @@
+//! Webhook API endpoints, primarily used for handling stripe events
 use axum::Router;
 
 use crate::state::AppState;

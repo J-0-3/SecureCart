@@ -1,6 +1,6 @@
 //! Logic for onboarding and user registration.
 use super::sessions::{self, SessionTrait as _};
-use crate::db::models::appuser::{AppUserRole, AppUserSearchParameters};
+use crate::db::models::appuser::AppUserSearchParameters;
 use crate::{
     constants::passwords::{PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH},
     db::{
@@ -106,17 +106,20 @@ pub mod errors {
     /// Errors returned while initiating an onboarding session.
     #[derive(Error, Debug)]
     pub enum SignupInitError {
-        /// An error in the underlying storage
         #[error(transparent)]
+        /// An error in the underlying storage
         StorageError(#[from] StorageError),
-        /// The signup attempt uses an email which is already registered.
         #[error("Email is already is use")]
+        /// The signup attempt uses an email which is already registered.
         DuplicateEmail(String),
         #[error("The signup address field is empty")]
+        /// TODO: add documentation
         EmptyAddress,
         #[error("The signup surname field is empty")]
+        /// TODO: add documentation
         EmptySurname,
         #[error("The signup forename field is empty")]
+        /// TODO: add documentation
         EmptyForename,
     }
 

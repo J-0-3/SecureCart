@@ -61,7 +61,7 @@ pub async fn session_middleware<T: SessionTrait + 'static>(
     Ok(next.run(req).await)
 }
 
-/// Does the same thing as session_middleware, but skips the CSRF check. This
+/// Does the same thing as `session_middleware`, but skips the CSRF check. This
 /// potentially enables CSRF attacks against the endpoint in question, so
 /// ensure it does not have any dangerous effects.
 #[expect(

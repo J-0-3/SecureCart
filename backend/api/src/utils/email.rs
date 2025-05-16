@@ -16,6 +16,10 @@ static EMAIL_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
 pub struct EmailAddress(String);
 
 impl fmt::Display for EmailAddress {
+    #[expect(
+        clippy::min_ident_chars,
+        reason = "f is the trait function parameter name"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -46,6 +50,10 @@ impl From<EmailAddress> for String {
     }
 }
 
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "Recommended not to implement deserialize_in_place"
+)]
 impl<'de> Deserialize<'de> for EmailAddress {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

@@ -1,3 +1,4 @@
+//! HTTP error handling and automated response generation
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -7,8 +8,11 @@ use serde_json::json;
 
 use crate::db::errors::DatabaseError;
 
+/// Represents an HTTP status code, optionally with a custom message.
 pub struct HttpError {
+    /// The numeric HTTP status code to respond with.
     status: StatusCode,
+    /// The message to include in the response.
     message: Option<String>,
 }
 
@@ -22,6 +26,7 @@ impl From<StatusCode> for HttpError {
 }
 
 impl HttpError {
+    /// Construct a new HTTP error with a given status code and message.
     pub const fn new(status: StatusCode, message: Option<String>) -> Self {
         Self { status, message }
     }

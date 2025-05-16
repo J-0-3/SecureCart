@@ -1,3 +1,4 @@
+//! Routes for handling order creation and access, interacts with the order service
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -20,6 +21,7 @@ use crate::{
     utils::httperror::HttpError,
 };
 
+/// TODO: add documentation
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let customer = Router::new()
         .route("/", post(create_order))
@@ -45,16 +47,22 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
 }
 
 #[derive(Deserialize)]
+/// TODO: add documentation
 struct CreateOrderRequest {
+    /// TODO: add documentation
     products: Vec<CreateOrderRequestProductEntry>,
 }
 
 #[derive(Deserialize)]
+/// TODO: add documentation
 struct CreateOrderRequestProductEntry {
+    /// TODO: add documentation
     product: Uuid,
+    /// TODO: add documentation
     count: u32,
 }
 
+/// TODO: add documentation
 async fn create_order(
     State(state): State<AppState>,
     Extension(session): Extension<CustomerSession>,
@@ -75,7 +83,9 @@ async fn create_order(
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 struct OrderSearchResponse {
+    /// TODO: add documentation
     orders: Vec<AppOrder>,
 }
 
@@ -104,11 +114,15 @@ async fn search_orders(
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 struct RetrieveOrderResponse {
+    /// TODO: add documentation
     order: AppOrder,
+    /// TODO: add documentation
     items: Vec<(String, u32)>,
 }
 
+/// TODO: add documentation
 async fn retrieve_order(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
@@ -162,6 +176,7 @@ async fn retrieve_order(
     Ok(Json(order))
 }
 
+/// TODO: add documentation
 async fn delete_order(
     State(state): State<AppState>,
     Extension(session): Extension<GenericAuthenticatedSession>,
@@ -188,6 +203,7 @@ async fn delete_order(
     Ok(())
 }
 
+/// TODO: add documentation
 async fn fulfil_order(
     State(state): State<AppState>,
     Path(order_id): Path<Uuid>,

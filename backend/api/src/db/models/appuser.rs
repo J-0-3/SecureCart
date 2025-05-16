@@ -35,7 +35,9 @@ pub enum AppUserRole {
 
 #[derive(Deserialize)]
 pub struct AppUserSearchParameters {
+    /// TODO: add documentation
     pub email: Option<EmailAddress>,
+    /// TODO: add documentation
     pub role: Option<AppUserRole>,
 }
 
@@ -51,7 +53,7 @@ pub struct AppUser {
     pub forename: String,
     /// The user's surname.
     pub surname: String,
-    /// The user's age.
+    /// The user's address.
     pub address: String,
     /// The user's role (customer or admin).
     pub role: AppUserRole,
@@ -70,7 +72,6 @@ impl AppUserInsert {
 
     /// Store this INSERT model in the database and return a complete `AppUser` model.
     pub async fn store(self, db_client: &ConnectionPool) -> Result<AppUser, DatabaseError> {
-        #[expect(clippy::as_conversions, reason="Used in query_as! macro for Postgres coersion")]
         Ok(query_as!(
             AppUser,
             r#"INSERT INTO appuser
@@ -151,6 +152,7 @@ impl AppUser {
         Ok(())
     }
 
+    /// TODO: add documentation
     pub async fn search(
         params: AppUserSearchParameters,
         db_client: &ConnectionPool,

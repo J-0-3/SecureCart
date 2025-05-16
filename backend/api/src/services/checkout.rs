@@ -1,3 +1,4 @@
+//! Logic for handling checkouts, with or without Stripe integrated.
 #[cfg(feature = "stripe")]
 use crate::constants::stripe::STRIPE_SECRET_KEY;
 use crate::db::{self, models::apporder::AppOrder};
@@ -6,9 +7,11 @@ use stripe;
 use uuid::Uuid;
 
 #[cfg(feature = "stripe")]
+/// A live checkout token containing a stripe PaymentIntent.
 pub struct CheckoutToken(stripe::PaymentIntent);
 
 #[cfg(not(feature = "stripe"))]
+/// A mock checkout token not including a Stripe `PaymentIntent`.
 pub struct CheckoutToken;
 
 impl CheckoutToken {
@@ -67,25 +70,44 @@ impl CheckoutToken {
         }
     }
     #[cfg(not(feature = "stripe"))]
+    #[expect(
+        clippy::unused_self,
+        reason = "This is a mock method, must match the real signature"
+    )]
     /// Always returns None, would return Some if stripe were enabled.
     pub const fn client_secret(&self) -> Option<String> {
         None
     }
 }
 
+/// TODO: add documentation
 pub mod errors {
     use crate::db::errors::DatabaseError;
     use thiserror::Error;
     use uuid::Uuid;
 
     #[derive(Debug, Error)]
+    /// TODO: add documentation
     pub enum CheckoutTokenCreateError {
         #[error(transparent)]
+        /// TODO: add documentation
         DatabaseError(#[from] DatabaseError),
         #[error("Attempted to create a checkout token for a non-existent order ID")]
-        OrderNonExistent { user_id: Uuid, order_id: Uuid },
+        /// TODO: add documentation
+        OrderNonExistent {
+            /// TODO: add documentation
+            user_id: Uuid,
+            /// TODO: add documentation
+            order_id: Uuid,
+        },
         #[error("The user ID does not match the owned of the order ID supplied")]
-        Unauthorized { user_id: Uuid, order_id: Uuid },
+        /// TODO: add documentation
+        Unauthorized {
+            /// TODO: add documentation
+            user_id: Uuid,
+            /// TODO: add documentation
+            order_id: Uuid,
+        },
         #[cfg(feature = "stripe")]
         #[error(transparent)]
         StripeError(#[from] stripe::StripeError),

@@ -28,38 +28,50 @@ pub enum SessionType {
     Registration,
 }
 
-/// Information stored with a `PreAuthentication` session token.
 #[derive(Clone)]
+/// Information stored with a `PreAuthentication` session token.
 pub struct PreAuthenticationSessionData {
     /// The ID of the user in the process of authenticating with this token.
     pub user_id: Uuid,
 }
 
-/// Information stored with an Authenticated session token.
 #[derive(Clone)]
+/// Information stored with an Authenticated session token.
 pub struct AuthenticatedSessionData {
+    /// TODO: add documentation
     pub user_id: Uuid,
+    /// TODO: add documentation
     pub admin: bool,
 }
 
 /// Information stored with a Registration session token.
 #[derive(Clone)]
 pub struct RegistrationSessionData {
+    /// TODO: add documentation
     pub user_data: AppUserInsert,
 }
 /// Information stored alongside a session token.
 #[derive(Clone)]
 pub enum SessionInfo {
+    /// TODO: add documentation
     PreAuthentication {
+        /// TODO: add documentation
         csrf: String,
+        /// TODO: add documentation
         data: PreAuthenticationSessionData,
     },
+    /// TODO: add documentation
     Authenticated {
+        /// TODO: add documentation
         csrf: String,
+        /// TODO: add documentation
         data: AuthenticatedSessionData,
     },
+    /// TODO: add documentation
     Registration {
+        /// TODO: add documentation
         csrf: String,
+        /// TODO: add documentation
         data: RegistrationSessionData,
     },
 }
@@ -77,17 +89,18 @@ impl SessionType {
 }
 
 impl SessionInfo {
+    /// TODO: add documentation
     pub fn csrf_token(&self) -> String {
-        let (Self::PreAuthentication { csrf, .. }
-        | Self::Registration { csrf, .. }
-        | Self::Authenticated { csrf, .. }) = self;
+        let (Self::PreAuthentication { ref csrf, .. }
+        | Self::Registration { ref csrf, .. }
+        | Self::Authenticated { ref csrf, .. }) = *self;
         csrf.to_owned()
     }
     /// Extract authentication data (user ID) from this session, and return None if it is
     /// not a preauthentication session.
     pub const fn as_pre_auth(&self) -> Option<&PreAuthenticationSessionData> {
-        match self {
-            Self::PreAuthentication { data, .. } => Some(data),
+        match *self {
+            Self::PreAuthentication { ref data, .. } => Some(data),
             Self::Registration { .. } | Self::Authenticated { .. } => None,
         }
     }
@@ -95,16 +108,16 @@ impl SessionInfo {
     /// Extract authenticated data (user ID, is admin) from this session, and return
     /// None if it is not an authenticated session.
     pub const fn as_auth(&self) -> Option<&AuthenticatedSessionData> {
-        match self {
-            Self::Authenticated { data, .. } => Some(data),
+        match *self {
+            Self::Authenticated { ref data, .. } => Some(data),
             Self::PreAuthentication { .. } | Self::Registration { .. } => None,
         }
     }
 
     /// Extract user data from this, and return None if it is not a `RegistrationSession`.
     pub const fn as_registration(&self) -> Option<&RegistrationSessionData> {
-        match self {
-            Self::Registration { data, .. } => Some(data),
+        match *self {
+            Self::Registration { ref data, .. } => Some(data),
             Self::PreAuthentication { .. } | Self::Authenticated { .. } => None,
         }
     }

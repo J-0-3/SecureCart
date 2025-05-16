@@ -1,3 +1,7 @@
+#![expect(
+    clippy::pattern_type_mismatch,
+    reason = "This warning comes from sqlx::Type, not my fault"
+)]
 //! Models mapping to the apporder database table. Represents a user's order
 //! from the store.
 use crate::db::{errors::DatabaseError, ConnectionPool};
@@ -18,9 +22,13 @@ pub struct AppOrderInsert {
 
 #[derive(Clone, Copy, sqlx::Type, Serialize, Deserialize, PartialEq, Eq)]
 #[sqlx(type_name = "app_order_status")]
+/// TODO: add documentation
 pub enum AppOrderStatus {
+    /// TODO: add documentation
     Unconfirmed,
+    /// TODO: add documentation
     Confirmed,
+    /// TODO: add documentation
     Fulfilled,
 }
 
@@ -55,6 +63,7 @@ where
 impl AppOrderInsert {
     /// Store this INSERT model in the database and return a complete `AppOrder` model.
     pub async fn store(self, db_client: &ConnectionPool) -> Result<AppOrder, DatabaseError> {
+        #[expect(clippy::as_conversions, reason="As here is part of the query_as! macro")]
         Ok(query_as!(
             AppOrder,
             r#"INSERT INTO apporder (user_id, order_placed, amount_charged, status) VALUES ($1, $2, $3, $4) RETURNING id, user_id, order_placed AS "order_placed", amount_charged, status AS "status!: AppOrderStatus""#,
@@ -64,8 +73,11 @@ impl AppOrderInsert {
 }
 
 #[derive(Deserialize)]
+/// TODO: add documentation
 pub struct AppOrderSearchParameters {
+    /// TODO: add documentation
     pub user_id: Option<Uuid>,
+    /// TODO: add documentation
     pub status: Option<AppOrderStatus>,
 }
 
@@ -74,6 +86,7 @@ impl AppOrder {
     pub const fn id(&self) -> Uuid {
         self.id
     }
+    /// TODO: add documentation
     pub const fn user_id(&self) -> Uuid {
         self.user_id
     }
@@ -92,6 +105,7 @@ impl AppOrder {
             .fetch_all(db_client)
             .await?)
     }
+    /// TODO: add documentation
     pub async fn search(
         params: AppOrderSearchParameters,
         db_client: &ConnectionPool,
@@ -112,6 +126,7 @@ impl AppOrder {
 
     /// Update the database record to match the model's current state.
     pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {
+        #[expect(clippy::as_conversions, reason="As here is part of the query! macro, not an actual as cast")]
         query!(
             "UPDATE apporder SET user_id=$1, order_placed=$2, amount_charged=$3, status=$4 WHERE id=$5",
             self.user_id, self.order_placed, self.amount_charged, self.status as AppOrderStatus, self.id
@@ -127,9 +142,11 @@ impl AppOrder {
         Ok(())
     }
 
+    /// TODO: add documentation
     pub const fn status(&self) -> AppOrderStatus {
         self.status
     }
+    /// TODO: add documentation
     pub const fn set_status(&mut self, status: AppOrderStatus) {
         self.status = status;
     }

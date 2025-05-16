@@ -38,6 +38,7 @@ impl TotpInsert {
         .await?)
     }
 
+    /// TODO: add documentation
     pub fn validate(&self, code: &str) -> bool {
         let totp = totp_rs::TOTP::from_rfc6238(
             totp_rs::Rfc6238::with_defaults(self.secret.clone())

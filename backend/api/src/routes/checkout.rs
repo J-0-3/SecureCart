@@ -1,3 +1,4 @@
+//! Routes for handling checkout logic, interacts with the checkout service.
 use axum::{
     extract::State,
     http::StatusCode,
@@ -18,6 +19,7 @@ use crate::{
 #[cfg(feature = "stripe")]
 use crate::constants::stripe::STRIPE_PUBLISHABLE_KEY;
 
+/// TODO: add documentation
 pub fn create_router(state: &AppState) -> Router<AppState> {
     let customer = Router::new()
         .route("/", post(do_checkout))
@@ -30,8 +32,11 @@ pub fn create_router(state: &AppState) -> Router<AppState> {
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 struct CheckoutStatusResponse {
+    /// TODO: add documentation
     stripe_enabled: bool,
+    /// TODO: add documentation
     stripe_publishable_key: Option<String>,
 }
 
@@ -46,21 +51,30 @@ async fn get_status() -> Json<CheckoutStatusResponse> {
 }
 
 #[derive(Deserialize)]
+/// TODO: add documentation
 struct CheckoutRequestBody {
+    /// TODO: add documentation
     order_id: Uuid,
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 struct CheckoutResponsePaymentInfo {
+    /// TODO: add documentation
     publishable_key: String,
+    /// TODO: add documentation
     client_secret: String,
 }
 #[derive(Serialize)]
+/// TODO: add documentation
 struct CheckoutRequestResponse {
+    /// TODO: add documentation
     payment_required: bool,
+    /// TODO: add documentation
     payment_info: Option<CheckoutResponsePaymentInfo>,
 }
 
+/// TODO: add documentation
 async fn do_checkout(
     State(state): State<AppState>,
     Extension(session): Extension<CustomerSession>,

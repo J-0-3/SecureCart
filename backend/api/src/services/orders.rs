@@ -1,3 +1,4 @@
+//! Logic for handling orders, interacts with the `AppOrder` model.
 use serde::Serialize;
 use time::{OffsetDateTime, PrimitiveDateTime};
 use uuid::Uuid;
@@ -12,6 +13,7 @@ use crate::db::{
     },
 };
 
+/// TODO: add documentation
 pub async fn confirm_order(
     order_id: Uuid,
     db_conn: &db::ConnectionPool,
@@ -25,11 +27,15 @@ pub async fn confirm_order(
 }
 
 #[derive(Serialize)]
+/// TODO: add documentation
 pub struct AppOrderWithItems {
+    /// TODO: add documentation
     pub order: AppOrder,
+    /// TODO: add documentation
     pub items: Vec<(Uuid, u32)>, // id, count
 }
 
+/// TODO: add documentation
 pub async fn create_order(
     user_id: Uuid,
     product_counts: Vec<(Uuid, u32)>,
@@ -43,7 +49,7 @@ pub async fn create_order(
     for &(product_id, count) in &product_counts {
         let product = Product::select_one(product_id, db_conn)
             .await?
-            .filter(|product| product.is_listed())
+            .filter(Product::is_listed)
             .ok_or(errors::OrderCreationError::ProductNonExistent(product_id))?;
         total_cost = total_cost
             .checked_add(
@@ -68,6 +74,7 @@ pub async fn create_order(
     Ok(order)
 }
 
+/// TODO: add documentation
 pub async fn search_orders(
     params: AppOrderSearchParameters,
     db_conn: &db::ConnectionPool,
@@ -75,12 +82,14 @@ pub async fn search_orders(
     AppOrder::search(params, db_conn).await
 }
 
+/// TODO: add documentation
 pub async fn list_orders(
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<AppOrder>, db::errors::DatabaseError> {
     AppOrder::select_all(db_conn).await
 }
 
+/// TODO: add documentation
 pub async fn delete_order(
     order_id: Uuid,
     db_conn: &db::ConnectionPool,
@@ -91,6 +100,7 @@ pub async fn delete_order(
     }
 }
 
+/// TODO: add documentation
 pub async fn get_order(
     order_id: Uuid,
     db_conn: &db::ConnectionPool,
@@ -98,6 +108,7 @@ pub async fn get_order(
     AppOrder::select_one(order_id, db_conn).await
 }
 
+/// TODO: add documentation
 pub async fn get_order_with_items(
     order_id: Uuid,
     db_conn: &db::ConnectionPool,
@@ -116,6 +127,7 @@ pub async fn get_order_with_items(
     }))
 }
 
+/// TODO: add documentation
 pub async fn fulfil_order(
     order_id: Uuid,
     db_conn: &db::ConnectionPool,
@@ -131,45 +143,61 @@ pub async fn fulfil_order(
     Ok(())
 }
 
+/// Errors which can be returned by the orders service
 pub mod errors {
     use crate::db::errors::DatabaseError;
     use thiserror::Error;
     use uuid::Uuid;
 
     #[derive(Error, Debug)]
+    /// TODO: add documentation
     pub enum OrderConfirmationError {
         #[error(transparent)]
+        /// TODO: add documentation
         DatabaseError(#[from] DatabaseError),
         #[error("Order does not exist")]
+        /// TODO: add documentation
         OrderNonExistent(Uuid),
     }
     #[derive(Error, Debug)]
+    /// TODO: add documentation
     pub enum OrderCreationError {
         #[error(transparent)]
+        /// TODO: add documentation
         DatabaseError(#[from] DatabaseError),
         #[error("Product does not exist")]
+        /// TODO: add documentation
         ProductNonExistent(Uuid),
         #[error("User does not exist")]
+        /// TODO: add documentation
         UserNonExistent(Uuid),
         #[error("Total cost exceeds 64-bit max")]
+        /// TODO: add documentation
         CostTooLarge,
     }
 
     #[derive(Error, Debug)]
+    /// TODO: add documentation
     pub enum OrderFulfilmentError {
         #[error(transparent)]
+        /// TODO: add documentation
         DatabaseError(#[from] DatabaseError),
         #[error("Order does not exist")]
+        /// TODO: add documentation
         OrderNonExistent(Uuid),
         #[error("Order is not yet confirmed")]
+        /// TODO: add documentation
         OrderNotConfirmed(Uuid),
     }
 
     #[derive(Error, Debug)]
+    /// TODO: add documentation
     pub enum OrderDeletionError {
         #[error(transparent)]
+        /// TODO: add documentation
         DatabaseError(#[from] DatabaseError),
         #[error("Order does not exist")]
+        /// TODO: add documentation
         OrderNonExistent(Uuid),
     }
 }

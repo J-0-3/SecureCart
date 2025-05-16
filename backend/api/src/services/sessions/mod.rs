@@ -132,16 +132,21 @@ impl SessionTrait for GenericAuthenticatedSession {
     }
     fn csrf_token(&self) -> String {
         let (Self::Customer(CustomerSession {
-            session: BaseSession { session_info, .. },
+            session: BaseSession {
+                ref session_info, ..
+            },
         })
         | Self::Administrator(AdministratorSession {
-            session: BaseSession { session_info, .. },
-        })) = self;
+            session: BaseSession {
+                ref session_info, ..
+            },
+        })) = *self;
         session_info.csrf_token()
     }
 }
 
 impl GenericAuthenticatedSession {
+    /// TODO: add documentation
     pub fn user_id(&self) -> Uuid {
         match *self {
             Self::Customer(ref customer) => customer.user_id(),
