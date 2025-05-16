@@ -261,11 +261,10 @@ impl Connection {
         let maybe_admin: Option<bool> = self.0.hget(key, "admin").await?;
         let maybe_csrf_token: Option<String> = self.0.hget(key, "csrf").await?;
         Ok(maybe_user_id.and_then(|user_id| {
-            maybe_admin.and_then(|admin| {
-                maybe_csrf_token.map(|csrf| SessionInfo::Authenticated {
-                    data: AuthenticatedSessionData { user_id, admin },
-                    csrf,
-                })
+            let admin = maybe_admin?;
+            maybe_csrf_token.map(|csrf| SessionInfo::Authenticated {
+                data: AuthenticatedSessionData { user_id, admin },
+                csrf,
             })
         }))
     }

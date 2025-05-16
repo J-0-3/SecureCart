@@ -141,11 +141,11 @@ impl Product {
         Ok(query.build_query_as().fetch_all(db_client).await?)
     }
     /// Set this product as listed.
-    pub fn list(&mut self) {
+    pub const fn list(&mut self) {
         self.listed = true;
     }
     /// Set this product as not listed.
-    pub fn unlist(&mut self) {
+    pub const fn unlist(&mut self) {
         self.listed = false;
     }
     /// Set the product's price in pennies (GBP).

@@ -17,10 +17,6 @@ static STATUS_CODE_BAD_CSRF: LazyLock<StatusCode> =
     LazyLock::new(|| StatusCode::from_u16(419).unwrap());
 
 /// Middleware to parse a session cookie and identify the associated user.
-#[expect(
-    clippy::future_not_send,
-    reason = "This works fine in practice with axum, and all SessionTrait implementers should be safe to send."
-)]
 pub async fn session_middleware<T: SessionTrait + 'static>(
     State(state): State<AppState>,
     cookie_jar: CookieJar,
@@ -64,10 +60,6 @@ pub async fn session_middleware<T: SessionTrait + 'static>(
 /// Does the same thing as `session_middleware`, but skips the CSRF check. This
 /// potentially enables CSRF attacks against the endpoint in question, so
 /// ensure it does not have any dangerous effects.
-#[expect(
-    clippy::future_not_send,
-    reason = "This works fine in practice with axum, and all SessionTrait implementers should be safe to send."
-)]
 pub async fn session_middleware_no_csrf<T: SessionTrait + 'static>(
     State(state): State<AppState>,
     cookie_jar: CookieJar,
