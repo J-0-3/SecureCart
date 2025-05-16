@@ -8,7 +8,7 @@ RUN npm install
 COPY src src
 RUN tsc
 
-FROM nginx AS server
+FROM nginx:1.28.0 AS server
 COPY healthcheck.sh /bin/healthcheck.sh
 RUN chmod +x /bin/healthcheck.sh
 COPY --from=builder /app/src/ /usr/share/nginx/html/
