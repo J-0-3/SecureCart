@@ -8,11 +8,12 @@ use argon2::{
     Algorithm, Argon2, Params, Version,
 };
 use sqlx::{query, query_as};
+use uuid::Uuid;
 
 /// INSERT model for a `Password`. Used ONLY when adding a new credential.
 pub struct PasswordInsert {
     /// The ID of the user who uses this credential.
-    user_id: i64,
+    user_id: Uuid,
     /// The hashed password string.
     password: String,
 }
@@ -21,7 +22,7 @@ pub struct PasswordInsert {
 /// by reading it from the database.
 pub struct Password {
     /// The ID of the user who uses this credential.
-    user_id: i64,
+    user_id: Uuid,
     /// The hashed password string.
     password: String,
 }
@@ -31,7 +32,7 @@ fn create_argon2<'a>() -> Argon2<'a> {
     Argon2::new(
         Algorithm::Argon2id,
         Version::V0x13,
-        Params::new(12288, 3, 1, None).expect("Invalid Argon2id parameters"),
+        Params::new(0x4000, 3, 1, None).expect("Invalid Argon2id parameters"),
     )
 }
 
@@ -47,9 +48,9 @@ fn hash_password(password: &str) -> String {
 
 impl PasswordInsert {
     /// Construct a new password INSERT model.
-    pub fn new(user_id: u32, password: &str) -> Self {
+    pub fn new(user_id: Uuid, password: &str) -> Self {
         Self {
-            user_id: i64::from(user_id),
+            user_id,
             password: hash_password(password),
         }
     }
@@ -78,16 +79,14 @@ impl Password {
     }
     /// Select a password credential from the database by the corresponding user's ID.
     pub async fn select(
-        user_id: u32,
+        user_id: Uuid,
         db_client: &ConnectionPool,
     ) -> Result<Option<Self>, DatabaseError> {
-        Ok(query_as!(
-            Self,
-            "SELECT * FROM password WHERE user_id = $1",
-            i64::from(user_id)
+        Ok(
+            query_as!(Self, "SELECT * FROM password WHERE user_id = $1", user_id)
+                .fetch_optional(db_client)
+                .await?,
         )
-        .fetch_optional(db_client)
-        .await?)
     }
     /// Update the database record to match the model's internal state.
     pub async fn update(&self, db_client: &ConnectionPool) -> Result<(), DatabaseError> {

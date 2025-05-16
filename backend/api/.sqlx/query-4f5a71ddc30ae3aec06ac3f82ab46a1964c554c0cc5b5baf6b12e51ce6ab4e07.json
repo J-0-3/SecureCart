@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO appuser\n            (email, forename, surname, address, role)\n            VALUES ($1, pgp_sym_encrypt($2, $5), pgp_sym_encrypt($3, $5), pgp_sym_encrypt($4, $5), 'Customer')\n            RETURNING id, email AS \"email: _\", pgp_sym_decrypt(forename, $5) AS \"forename!\",\n            pgp_sym_decrypt(surname, $5) AS \"surname!\",\n            pgp_sym_decrypt(address, $5) AS \"address!\", role AS \"role!: AppUserRole\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email: _",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "forename!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "surname!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "address!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "role!: AppUserRole",
+        "type_info": {
+          "Custom": {
+            "name": "app_user_role",
+            "kind": {
+              "Enum": [
+                "Customer",
+                "Administrator"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "4f5a71ddc30ae3aec06ac3f82ab46a1964c554c0cc5b5baf6b12e51ce6ab4e07"
+}

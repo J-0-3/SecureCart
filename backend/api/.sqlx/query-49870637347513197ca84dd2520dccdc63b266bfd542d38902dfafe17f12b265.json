@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO order_item (product_id, order_id, count) VALUES ($1, $2, $3) RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "order_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "product_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "49870637347513197ca84dd2520dccdc63b266bfd542d38902dfafe17f12b265"
+}

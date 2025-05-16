@@ -1,3 +1,4 @@
 node_modules
 src/js/*.js
+!src/js/checkout.js
 package-lock.json

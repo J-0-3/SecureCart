@@ -1,8 +1,15 @@
 //! Provides an abstracted interface to the underlying session store. Accessible only
 //! within the session service, since no other part of the code should ever access
 //! the session store.
-use crate::{constants::redis as constants, db::models::appuser::AppUserInsert};
+use crate::{
+    constants::{
+        redis as constants,
+        sessions::{AUTH_PENALTY_PERIOD, AUTH_TIMEOUT_ATTEMPTS, AUTH_TIMEOUT_PERIOD},
+    },
+    db::models::appuser::AppUserInsert,
+};
 use redis::{aio::MultiplexedConnection, AsyncCommands as _};
+use uuid::Uuid;
 
 #[derive(Clone)]
 /// A connection to the session store. Guaranteed to be safe to clone and share
@@ -21,25 +28,51 @@ pub enum SessionType {
     Registration,
 }
 
+#[derive(Clone)]
+/// Information stored with a `PreAuthentication` session token.
+pub struct PreAuthenticationSessionData {
+    /// The ID of the user in the process of authenticating with this token.
+    pub user_id: Uuid,
+}
+
+#[derive(Clone)]
+/// Information stored with an Authenticated session token.
+pub struct AuthenticatedSessionData {
+    /// TODO: add documentation
+    pub user_id: Uuid,
+    /// TODO: add documentation
+    pub admin: bool,
+}
+
+/// Information stored with a Registration session token.
+#[derive(Clone)]
+pub struct RegistrationSessionData {
+    /// TODO: add documentation
+    pub user_data: AppUserInsert,
+}
 /// Information stored alongside a session token.
 #[derive(Clone)]
 pub enum SessionInfo {
-    /// Information stored with a `PreAuthentication` session token.
+    /// TODO: add documentation
     PreAuthentication {
-        /// The ID of the user in the process of authenticating with this token.
-        user_id: u32,
+        /// TODO: add documentation
+        csrf: String,
+        /// TODO: add documentation
+        data: PreAuthenticationSessionData,
     },
-    /// Information stored with an Authenticated session token.
+    /// TODO: add documentation
     Authenticated {
-        /// The ID of the user authenticated by this token.
-        user_id: u32,
-        /// Whether this session grants admin authorisation.
-        admin: bool,
+        /// TODO: add documentation
+        csrf: String,
+        /// TODO: add documentation
+        data: AuthenticatedSessionData,
     },
-    /// Information stored with a Registration session token.
+    /// TODO: add documentation
     Registration {
-        /// User data to insert once the registration session completes.
-        user_data: AppUserInsert,
+        /// TODO: add documentation
+        csrf: String,
+        /// TODO: add documentation
+        data: RegistrationSessionData,
     },
 }
 
@@ -56,29 +89,36 @@ impl SessionType {
 }
 
 impl SessionInfo {
-    /// Extract authentication data (user ID) from this session, and return an error if it is a
-    /// `RegistrationSession`.
-    pub const fn as_pre_auth(&self) -> Result<u32, ()> {
+    /// TODO: add documentation
+    pub fn csrf_token(&self) -> String {
+        let (Self::PreAuthentication { ref csrf, .. }
+        | Self::Registration { ref csrf, .. }
+        | Self::Authenticated { ref csrf, .. }) = *self;
+        csrf.to_owned()
+    }
+    /// Extract authentication data (user ID) from this session, and return None if it is
+    /// not a preauthentication session.
+    pub const fn as_pre_auth(&self) -> Option<&PreAuthenticationSessionData> {
         match *self {
-            Self::PreAuthentication { user_id } => Ok(user_id),
-            Self::Registration { .. } | Self::Authenticated { .. } => Err(()),
+            Self::PreAuthentication { ref data, .. } => Some(data),
+            Self::Registration { .. } | Self::Authenticated { .. } => None,
         }
     }
 
     /// Extract authenticated data (user ID, is admin) from this session, and return
-    /// an error if it is not an authenticated session.
-    pub const fn as_auth(&self) -> Result<(u32, bool), ()> {
+    /// None if it is not an authenticated session.
+    pub const fn as_auth(&self) -> Option<&AuthenticatedSessionData> {
         match *self {
-            Self::Authenticated { user_id, admin } => Ok((user_id, admin)),
-            Self::PreAuthentication { .. } | Self::Registration { .. } => Err(()),
+            Self::Authenticated { ref data, .. } => Some(data),
+            Self::PreAuthentication { .. } | Self::Registration { .. } => None,
         }
     }
 
-    /// Extract user data from this, and return an error if it is not a `RegistrationSession`.
-    pub fn as_registration(&self) -> Result<AppUserInsert, ()> {
+    /// Extract user data from this, and return None if it is not a `RegistrationSession`.
+    pub const fn as_registration(&self) -> Option<&RegistrationSessionData> {
         match *self {
-            Self::Registration { ref user_data } => Ok(user_data.clone()),
-            Self::PreAuthentication { .. } | Self::Authenticated { .. } => Err(()),
+            Self::Registration { ref data, .. } => Some(data),
+            Self::PreAuthentication { .. } | Self::Authenticated { .. } => None,
         }
     }
 }
@@ -103,18 +143,34 @@ impl Connection {
                 .await?,
         ))
     }
+    /// Increments an internal counter to indicate an authentication attempt, and returns whether the user is timed out or now
+    pub async fn bruteforce_timeout(
+        &mut self,
+        client: &str,
+    ) -> Result<bool, errors::SessionStorageError> {
+        let key = format!("bruteforce:{client}");
+        let attempts: u32 = self.0.incr(&key, 1u32).await?;
+        if attempts < AUTH_TIMEOUT_ATTEMPTS {
+            let _: () = self.0.expire(&key, i64::from(AUTH_TIMEOUT_PERIOD)).await?;
+            Ok(false)
+        } else {
+            let _: () = self.0.expire(&key, i64::from(AUTH_PENALTY_PERIOD)).await?;
+            Ok(true)
+        }
+    }
     /// Store user data for a registration session in the store.
     async fn store_registration_data(
         &mut self,
         key: &str,
-        data: AppUserInsert,
+        csrf: &str,
+        RegistrationSessionData { user_data }: RegistrationSessionData,
     ) -> Result<(), errors::SessionCreationError> {
         let _: () = self
             .0
-            .hset_nx(key, "email", String::from(data.email()))
+            .hset_nx(key, "email", user_data.email.to_string())
             .await?;
         let set_email: String = self.0.hget(key, "email").await?;
-        if set_email != String::from(data.email()) {
+        if set_email != String::from(user_data.email) {
             return Err(errors::SessionCreationError::Duplicate);
         }
         let _: () = self
@@ -122,9 +178,10 @@ impl Connection {
             .hset_multiple(
                 key,
                 &[
-                    ("forename", &data.forename),
-                    ("surname", &data.surname),
-                    ("address", &data.address),
+                    ("forename", &user_data.forename),
+                    ("surname", &user_data.surname),
+                    ("address", &user_data.address),
+                    ("csrf", &csrf.to_owned()),
                 ],
             )
             .await?;
@@ -135,13 +192,14 @@ impl Connection {
     async fn store_authenticated_data(
         &mut self,
         key: &str,
-        user_id: u32,
-        admin: bool,
+        csrf: &str,
+        AuthenticatedSessionData { user_id, admin }: AuthenticatedSessionData,
     ) -> Result<(), errors::SessionCreationError> {
         let _: () = self.0.hset_nx(key, "user_id", user_id).await?;
-        let set_user_id: u32 = self.0.hget(key, "user_id").await?;
+        let set_user_id: Uuid = self.0.hget(key, "user_id").await?;
         if set_user_id == user_id {
             let _: () = self.0.hset(key, "admin", admin).await?;
+            let _: () = self.0.hset(key, "csrf", csrf).await?;
             Ok(())
         } else {
             Err(errors::SessionCreationError::Duplicate)
@@ -152,11 +210,13 @@ impl Connection {
     async fn store_preauthentication_data(
         &mut self,
         key: &str,
-        user_id: u32,
+        csrf: &str,
+        PreAuthenticationSessionData { user_id }: PreAuthenticationSessionData,
     ) -> Result<(), errors::SessionCreationError> {
         let _: () = self.0.hset_nx(key, "user_id", user_id).await?;
-        let set_user_id: u32 = self.0.hget(key, "user_id").await?;
+        let set_user_id: Uuid = self.0.hget(key, "user_id").await?;
         if set_user_id == user_id {
+            let _: () = self.0.hset(key, "csrf", csrf).await?;
             Ok(())
         } else {
             Err(errors::SessionCreationError::Duplicate)
@@ -176,15 +236,19 @@ impl Connection {
         let forename: String = self.0.hget(key, "forename").await?;
         let surname: String = self.0.hget(key, "surname").await?;
         let address: String = self.0.hget(key, "address").await?;
+        let csrf: String = self.0.hget(key, "csrf").await?;
         Ok(Some(SessionInfo::Registration {
-            user_data: AppUserInsert::new(
-                email
-                    .try_into()
-                    .expect("Solar bit flip or act of God made email address invalid."),
-                &forename,
-                &surname,
-                &address,
-            ),
+            data: RegistrationSessionData {
+                user_data: AppUserInsert::new(
+                    email
+                        .try_into()
+                        .expect("Solar bit flip or act of God made email address invalid."),
+                    &forename,
+                    &surname,
+                    &address,
+                ),
+            },
+            csrf,
         }))
     }
 
@@ -193,10 +257,15 @@ impl Connection {
         &mut self,
         key: &str,
     ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
-        let maybe_user_id: Option<u32> = self.0.hget(key, "user_id").await?;
+        let maybe_user_id: Option<Uuid> = self.0.hget(key, "user_id").await?;
         let maybe_admin: Option<bool> = self.0.hget(key, "admin").await?;
+        let maybe_csrf_token: Option<String> = self.0.hget(key, "csrf").await?;
         Ok(maybe_user_id.and_then(|user_id| {
-            maybe_admin.map(|admin| SessionInfo::Authenticated { user_id, admin })
+            let admin = maybe_admin?;
+            maybe_csrf_token.map(|csrf| SessionInfo::Authenticated {
+                data: AuthenticatedSessionData { user_id, admin },
+                csrf,
+            })
         }))
     }
 
@@ -205,11 +274,17 @@ impl Connection {
         &mut self,
         key: &str,
     ) -> Result<Option<SessionInfo>, errors::SessionStorageError> {
-        let user_id: Option<u32> = self.0.hget(key, "user_id").await?;
-        Ok(user_id.map(|id| SessionInfo::PreAuthentication { user_id: id }))
+        let maybe_user_id: Option<Uuid> = self.0.hget(key, "user_id").await?;
+        let maybe_csrf_token: Option<String> = self.0.hget(key, "csrf").await?;
+        Ok(maybe_user_id.and_then(|user_id| {
+            maybe_csrf_token.map(|csrf| SessionInfo::PreAuthentication {
+                data: PreAuthenticationSessionData { user_id },
+                csrf,
+            })
+        }))
     }
 
-    /// Create a new session with a given token in the session store.
+    /// Create a new session with a given token token in the session store.
     pub(super) async fn create(
         &mut self,
         token: &str,
@@ -223,14 +298,17 @@ impl Connection {
             return Err(errors::SessionCreationError::Duplicate);
         }
         match session_info {
-            SessionInfo::Registration { user_data } => {
-                self.store_registration_data(&key, user_data).await
+            SessionInfo::Registration { ref data, .. } => {
+                self.store_registration_data(&key, &session_info.csrf_token(), data.to_owned())
+                    .await
             }
-            SessionInfo::PreAuthentication { user_id } => {
-                self.store_preauthentication_data(&key, user_id).await
+            SessionInfo::PreAuthentication { ref data, .. } => {
+                self.store_preauthentication_data(&key, &session_info.csrf_token(), data.to_owned())
+                    .await
             }
-            SessionInfo::Authenticated { user_id, admin } => {
-                self.store_authenticated_data(&key, user_id, admin).await
+            SessionInfo::Authenticated { ref data, .. } => {
+                self.store_authenticated_data(&key, &session_info.csrf_token(), data.to_owned())
+                    .await
             }
         }
     }

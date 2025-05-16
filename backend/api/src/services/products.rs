@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use object_store::ObjectStore;
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::{
     constants::s3::{S3_BUCKET, S3_EXTERNAL_URI},
@@ -61,7 +62,7 @@ fn with_image_uris(product: Product) -> Product {
 /// scope to retrieve from. `VISIBILITY_SCOPE` must *ONLY* be set to a value from
 /// `ProductVisibilityScope`, or the function's behaviour is undefined.
 pub async fn retrieve_product<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
-    id: u32,
+    id: Uuid,
     db_conn: &db::ConnectionPool,
 ) -> Result<Option<Product>, db::errors::DatabaseError> {
     Ok(Product::select_one(id, db_conn)
@@ -79,7 +80,7 @@ pub async fn retrieve_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
     Ok(Product::search(
-        &db::models::product::ProductSearchParameters {
+        db::models::product::ProductSearchParameters {
             listed: (VISIBILITY_SCOPE == ProductVisibilityScope::LISTED_ONLY).then_some(true),
             ..Default::default()
         },
@@ -113,7 +114,7 @@ pub async fn search_products<const VISIBILITY_SCOPE: ProductVisibilityScopeT>(
     params: &ProductSearchParameters,
 ) -> Result<Vec<Product>, db::errors::DatabaseError> {
     Ok(Product::search(
-        &db::models::product::ProductSearchParameters {
+        db::models::product::ProductSearchParameters {
             name: params.name.clone(),
             price_min: params.price_min,
             price_max: params.price_max,
@@ -144,13 +145,13 @@ pub struct ProductUpdate {
 
 /// Update an an existing stored product.
 pub async fn update_product(
-    id: u32,
+    id: Uuid,
     product_info: ProductUpdate,
     db_conn: &db::ConnectionPool,
 ) -> Result<(), errors::ProductUpdateError> {
     let mut product = Product::select_one(id, db_conn)
         .await?
-        .ok_or(errors::ProductUpdateError::NonExistent)?;
+        .ok_or(errors::ProductUpdateError::NonExistent(id))?;
     if let Some(name) = product_info.name {
         product.set_name(&name);
     }
@@ -173,14 +174,14 @@ pub async fn update_product(
 /// Add an image to a product, returning the path (URI) at which the image can be
 /// found.
 pub async fn add_image(
-    product_id: u32,
+    product_id: Uuid,
     image: Vec<u8>,
     db_conn: &db::ConnectionPool,
     media_store: Arc<dyn ObjectStore>,
 ) -> Result<String, errors::AddImageError> {
     let _: Product = Product::select_one(product_id, db_conn)
         .await?
-        .ok_or(errors::AddImageError::NonExistent)?;
+        .ok_or(errors::AddImageError::NonExistent(product_id))?;
     let image_path = media::store_image(media_store, image).await?;
     let image_insert = ProductImageInsert::new(product_id, &image_path);
     let _: ProductImage = image_insert.store(db_conn).await?;
@@ -194,7 +195,7 @@ pub async fn add_image(
 
 /// List the paths (URIs) of all images associated with the given product.
 pub async fn list_images(
-    product_id: u32,
+    product_id: Uuid,
     db_conn: &db::ConnectionPool,
 ) -> Result<Vec<String>, db::errors::DatabaseError> {
     Ok(ProductImage::select_all(product_id, db_conn)
@@ -213,7 +214,7 @@ pub async fn list_images(
 
 /// Delete an image from a product at a given path.
 pub async fn delete_image(
-    product_id: u32,
+    product_id: Uuid,
     path: &str,
     db_conn: &db::ConnectionPool,
 ) -> Result<(), errors::ImageDeleteError> {
@@ -228,7 +229,10 @@ pub async fn delete_image(
     );
     let product = ProductImage::select(product_id, &normalised_path, db_conn)
         .await?
-        .ok_or(errors::ImageDeleteError::NonExistentImage)?;
+        .ok_or(errors::ImageDeleteError::NonExistentImage(
+            normalised_path,
+            product_id,
+        ))?;
     product.delete(db_conn).await?;
     Ok(())
 }
@@ -243,12 +247,12 @@ pub async fn create_product(
 
 /// Delete a given product from the database.
 pub async fn delete_product(
-    id: u32,
+    id: Uuid,
     db_conn: &db::ConnectionPool,
 ) -> Result<(), errors::ProductDeleteError> {
     let product = Product::select_one(id, db_conn)
         .await?
-        .ok_or(errors::ProductDeleteError::NonExistent)?;
+        .ok_or(errors::ProductDeleteError::NonExistent(id))?;
     Ok(product.delete(db_conn).await?)
 }
 
@@ -257,6 +261,7 @@ pub mod errors {
     use crate::db::errors::DatabaseError;
     use crate::services::media::errors::StoreImageError;
     use thiserror::Error;
+    use uuid::Uuid;
 
     /// Errors returned when updating products.
     #[derive(Error, Debug)]
@@ -266,7 +271,7 @@ pub mod errors {
         DatabaseError(#[from] DatabaseError),
         /// Raised when the product being updated does not exist.
         #[error("The product being updated does not exist.")]
-        NonExistent,
+        NonExistent(Uuid),
     }
     /// Errors returned when deleting products.
     #[derive(Error, Debug)]
@@ -276,7 +281,7 @@ pub mod errors {
         DatabaseError(#[from] DatabaseError),
         /// Raised when the product being deleted does not exist.
         #[error("The product being deleted does not exist.")]
-        NonExistent,
+        NonExistent(Uuid),
     }
     /// Errors returned when adding images to products.
     #[derive(Error, Debug)]
@@ -289,7 +294,7 @@ pub mod errors {
         MediaStoreError(#[from] StoreImageError),
         /// Raised when the product in question does not exist.
         #[error("The product being added to does not exist.")]
-        NonExistent,
+        NonExistent(Uuid),
     }
     /// Errors returned when deleting images from products.
     #[derive(Error, Debug)]
@@ -299,6 +304,6 @@ pub mod errors {
         DatabaseError(#[from] DatabaseError),
         /// Raised when the image being deleted does not exist.
         #[error("The image being deleted does not exist")]
-        NonExistentImage,
+        NonExistentImage(String, Uuid),
     }
 }

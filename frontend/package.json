@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@stripe/stripe-js": "^5.6.0",
     "@types/bootstrap": "^5.2.10"
   },
   "devDependencies": {

@@ -7,6 +7,14 @@ use super::secrets::read_secret;
 pub static S3_HOST: LazyLock<String> =
     LazyLock::new(|| var("S3_HOST").expect("S3_HOST not provided in environment variables"));
 
+/// The port where the S3-compatible storage service can be accessed.
+pub static S3_PORT: LazyLock<u16> = LazyLock::new(|| {
+    var("S3_PORT")
+        .expect("S3_PORT not provided in environment variables")
+        .parse()
+        .expect("S3_PORT is not a valid port number")
+});
+
 /// The bucket where application media data is stored.
 pub static S3_BUCKET: LazyLock<String> =
     LazyLock::new(|| var("S3_BUCKET").expect("S3_BUCKET not provided in environment variables"));
