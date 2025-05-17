@@ -8,7 +8,8 @@ RUN npm install
 COPY src src
 RUN tsc
 
-FROM nginx:1.28.0 AS server
+FROM nginx:1.28.0-alpine3.21 AS server
+RUN apk add curl bash --no-cache
 COPY healthcheck.sh /bin/healthcheck.sh
 RUN chmod +x /bin/healthcheck.sh
 COPY --from=builder /app/src/ /usr/share/nginx/html/
