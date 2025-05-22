@@ -221,10 +221,25 @@ async function load_orders() {
         orders.forEach((order) => {
             const li = document.createElement("li");
             li.className = "list-group-item list-group-item-action";
-            const pounds = (order.amount_charged / 100).toFixed(2);
-            li.innerHTML = `<strong>Order ID:</strong> ${order.id} – <strong>Amount:</strong> £${pounds} – <strong>Placed:</strong> ${new Date(
-                order.order_placed,
-            ).toLocaleString()} – <strong>Status:</strong> ${order.status}`;
+            const charged_amount_pounds = (order.amount_charged / 100).toFixed(2);
+            const order_id_label = document.createElement("strong");
+            order_id_label.textContent = "Order ID: ";
+            const amount_label = document.createElement("strong");
+            amount_label.textContent = "Amount: ";
+            const placed_label = document.createElement("strong");
+            placed_label.textContent = "Placed: ";
+            const status_label = document.createElement("strong");
+            status_label.textContent = "Status: ";
+            li.append(
+                order_id_label,
+                `${order.id} - `,
+                amount_label,
+                `£${charged_amount_pounds} - `,
+                placed_label,
+                `${new Date(order.order_placed).toLocaleString()} - `,
+                status_label,
+                order.status
+            );
             li.style.cursor = "pointer";
             li.addEventListener("click", () => {
                 window.location.replace(`/order.html?order=${order.id}`);
