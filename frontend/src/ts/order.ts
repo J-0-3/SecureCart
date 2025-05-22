@@ -92,27 +92,50 @@ async function render_order(
     console.error("Error fetching user info:", err);
   }
 
-  container.innerHTML = `
-    <h2>Order #${order_data.order.id}</h2>
-    <p><strong>Status:</strong> ${order_data.order.status}</p>
-    <p><strong>Order Placed:</strong> ${new Date(order_data.order.order_placed).toLocaleString()}</p>
-    <p><strong>Amount Charged:</strong> £${(order_data.order.amount_charged / 100).toFixed(2)}</p>
-    <p><strong>User Email:</strong> <span id="order-user-email"></span></p>
-    <p><strong>Shipping Address:</strong> <span id="order-user-address"></span></p>
-    <h3>Items</h3>
-    <ul id="order_items_list" class="list-group"></ul>
-  `;
+  const order_header = document.createElement("h2");
+  order_header.textContent = `Order #${order_data.order.id}`;
 
-  document.getElementById("order-user-email")!.textContent = user_info
-    ? user_info.email
-    : order_data.order.user_id.toString();
+  const status_p = document.createElement("p");
+  const status_label = document.createElement("strong");
+  status_label.textContent = "Status: ";
+  status_p.append(status_label, order_data.order.status);
 
-  document.getElementById("order-user-address")!.textContent = user_info
-    ? user_info.address
-    : "";
+  const order_placed_p = document.createElement("p");
+  const order_placed_label = document.createElement("strong");
+  order_placed_label.textContent = "Order Placed: ";
+  order_placed_p.append(order_placed_label, `${new Date(order_data.order.order_placed).toLocaleString()}`);
 
-  const items_list = document.getElementById("order_items_list");
-  if (!items_list) return;
+  const amount_charged_p = document.createElement("p");
+  const amount_charged_label = document.createElement("strong");
+  amount_charged_label.textContent = "Amount Charged: ";
+  amount_charged_p.append(amount_charged_label, `£${(order_data.order.amount_charged / 100).toFixed(2)}`)
+
+  const user_email_p = document.createElement("p");
+  const user_email_label = document.createElement("strong");
+  user_email_label.textContent = "User Email: ";
+  user_email_p.append(user_email_label, user_info ? user_info.email : order_data.order.user_id.toString());
+
+  const shipping_address_p = document.createElement("p");
+  const shipping_address_label = document.createElement("strong");
+  shipping_address_label.textContent = "Shipping Address: ";
+  shipping_address_p.append(shipping_address_label, user_info ? user_info.address : "");
+
+  const items_header = document.createElement("h3");
+  items_header.textContent = "Items";
+  const items_list = document.createElement("ul");
+  items_list.classList.add("list-group");
+
+  container.append(
+      order_header,
+      status_p,
+      order_placed_p,
+      amount_charged_p,
+      user_email_p,
+      shipping_address_p,
+      items_header,
+      items_list
+  );
+
   for (const item of order_data.items) {
     const product_url = item[0];
     const quantity = item[1];
