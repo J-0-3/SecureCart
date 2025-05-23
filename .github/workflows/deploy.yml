@@ -35,6 +35,7 @@ jobs:
         run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && docker load -i images.tar'
   deploy:
     runs-on: ubuntu-latest
+    needs: [build]
     steps:
       - uses: actions/checkout@v4
       - name: init-ssh-key
