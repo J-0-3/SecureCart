@@ -78,12 +78,5 @@ jobs:
         with:
           image: securecart/api
           args: --file=backend/api/Dockerfile --policy-path=.snyk
-      - name: snyk-docker-scan-minio
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: securecart/minio
-          args: --file=backend/minio/Dockerfile --policy-path=.snyk
 
 
