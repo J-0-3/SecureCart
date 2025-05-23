@@ -56,6 +56,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: securecart/nginx
+          args: --file=nginx/Dockerfile
       - name: upload-nginx-results
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -66,6 +67,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: securecart/frontend
+          args: --file=frontend/Dockerfile
       - name: upload-frontend-results
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -76,6 +78,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: securecart/db
+          args: --file=backend/db/Dockerfile
       - name: upload-db-results
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -86,6 +89,7 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: securecart/api
+          args: --file=backend/api/Dockerfile
       - name: upload-api-results
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -96,5 +100,6 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: securecart/minio
+          args: --file=backend/minio/Dockerfile
 
 
