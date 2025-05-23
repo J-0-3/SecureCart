@@ -18,14 +18,6 @@ jobs:
         run: echo '${{ secrets.ENV_FILE }}' > ./.env
       - name: docker-compose-build
         run: source ./.env && COMPOSE_BAKE=true docker compose build
-      - name: docker-tag-images
-        run: docker tag app-nginx securecart/nginx && \ 
-            docker tag app-frontend securecart/frontend && \
-            docker tag app-db securecart/db && \
-            docker tag app-api securecart/api && \
-            docker tag app-minio-setup securecart/minio-setup && \
-            docker tag app-db-setup securecart/db-setup && \
-            docker tag app-minio securecart/minio
       - name: export-images
         run: docker save -o images.tar securecart/db securecart/frontend \
           securecart/api securecart/minio-setup securecart/minio

@@ -55,7 +55,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: app-nginx
+          image: securecart/nginx
       - name: upload-nginx-results
         uses: github/codeql-action/upload-sarif@v2
         with:
@@ -65,7 +65,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: app-frontend
+          image: securecart/frontend
       - name: upload-frontend-results
         uses: github/codeql-action/upload-sarif@v2
         with:
@@ -75,7 +75,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: app-db
+          image: securecart/db
       - name: upload-db-results
         uses: github/codeql-action/upload-sarif@v2
         with:
@@ -85,7 +85,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: app-api
+          image: securecart/api
       - name: upload-api-results
         uses: github/codeql-action/upload-sarif@v2
         with:
@@ -95,6 +95,6 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          image: app-minio
+          image: securecart/minio
 
 

@@ -1,7 +1,9 @@
 # Development service configuration. All configuration and secret values are hardcoded. Insecure, never expose publically.
 services:
   db:
+    image: securecart/db
     build: backend/db
+    pull_policy: build
     environment:
       - POSTGRES_USER=${DB_USERNAME}
       - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
@@ -16,7 +18,9 @@ services:
       - db_password
 
   db-setup:
+    image: securecart/db-setup
     build: backend/db-setup
+    pull_policy: build
     environment:
       - DB_HOST=db
       - DB_DATABASE=${DB_DATABASE}
@@ -41,10 +45,12 @@ services:
       start_period: 30s
 
   api:
+    image: securecart/api
     build: 
       context: backend/api
       args:
         - ENABLE_STRIPE=${ENABLE_STRIPE}
+    pull_policy: build
     environment:
       - DB_HOST=db
       - DB_DATABASE=${DB_DATABASE}
@@ -86,7 +92,9 @@ services:
       - db_encryption_key
   
   minio:
+    image: securecart/minio
     build: backend/minio
+    pull_policy: build
     ports:
       - "127.0.0.1:9001:9001"
     environment:
@@ -104,10 +112,12 @@ services:
       - minio_root_password
 
   minio-setup:
+    image: securecart/minio-setup
     build: 
       context: backend/minio-setup
       args:
         - MINIO_HOST=minio
+    pull_policy: build
     environment:
       - BUCKET_NAME=media
       # these will default to docker secret paths (see backend/minio-setup/startup.sh)
@@ -125,7 +135,9 @@ services:
       - minio_secret_key
       
   frontend:
+    image: securecart/frontend
     build: frontend
+    pull_policy: build
     healthcheck:
       test: ["CMD", "/bin/healthcheck.sh"]
       interval: 30s
@@ -139,7 +151,9 @@ services:
           target: /usr/share/nginx/html/
 
   nginx:
-    build: nginx
+    image: securecart/nginx
+    build: ./nginx
+    pull_policy: build
     ports:
       - 8443:8443
     healthcheck:
