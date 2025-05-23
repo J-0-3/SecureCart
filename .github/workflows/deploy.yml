@@ -9,7 +9,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    steps:
       - uses: actions/checkout@v4
       - name: init-ssh-key
         run: mkdir -p ~/.ssh && echo '${{ secrets.AZURE_SSH_PRIVATE_KEY }}' > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
