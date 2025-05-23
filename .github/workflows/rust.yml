@@ -1,4 +1,4 @@
-name: Backend-Api-Cargo
+name: Backend-Api
 
 on:
   push:
@@ -10,18 +10,18 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  lintAndTest:
+  cargo:
     defaults:
       run:
         working-directory: ./backend/api
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Clippy
+    - name: clippy
       run: cargo clippy --all -- -Dwarnings -Adead_code
       env:
         SQLX_OFFLINE: true
-    # - name: Run tests
-    #   run: cargo test --verbose
-    #   env:
-    #     SQLX_OFFLINE: true
+    - name: test
+      run: cargo test --verbose
+      env:
+        SQLX_OFFLINE: true
