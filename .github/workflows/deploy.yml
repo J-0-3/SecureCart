@@ -1,0 +1,19 @@
+name: deploy
+
+on:
+  push:
+    branches: [ "master" ]
+
+
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: init-ssh
+        run: mkdir -p ~/.ssh && echo '${{ secrets.AZURE_SSH_PRIVATE_KEY }}' >> ~/.ssh/id_ed25519
+      - name: copy-to-vm
+        run: scp -r . '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app'
