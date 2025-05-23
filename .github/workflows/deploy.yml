@@ -35,5 +35,5 @@ jobs:
       - name: init-known-hosts
         run: echo '${{ secrets.AZURE_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
       - name: deploy-app
-        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && COMPOSE_BAKE=true docker compose -f prod.compose.yml up --no-build'
+        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && COMPOSE_BAKE=true docker compose -f prod.compose.yml up --no-build -d --force-recreate'
 

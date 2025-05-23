@@ -57,7 +57,7 @@ jobs:
         with:
           image: securecart/nginx
       - name: upload-nginx-results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-frontend
@@ -67,7 +67,7 @@ jobs:
         with:
           image: securecart/frontend
       - name: upload-frontend-results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-db
@@ -77,7 +77,7 @@ jobs:
         with:
           image: securecart/db
       - name: upload-db-results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-api
@@ -87,7 +87,7 @@ jobs:
         with:
           image: securecart/api
       - name: upload-api-results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-minio
