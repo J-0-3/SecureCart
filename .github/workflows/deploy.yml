@@ -19,5 +19,5 @@ jobs:
       - name: setup-env-file
         run: echo '${{ secrets.ENV_FILE }}' > ./env-file && scp ./env-file '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app/.env'
       - name: deploy-app
-        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && BUILD=true FORCE_RECREATE=true ./run-dev'
+        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && chmod +x ./run-dev.sh && BUILD=true FORCE_RECREATE=true ./run-dev.sh'
 
