@@ -6,6 +6,34 @@ on:
 
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    steps:
+      - uses: actions/checkout@v4
+      - name: init-ssh-key
+        run: mkdir -p ~/.ssh && echo '${{ secrets.AZURE_SSH_PRIVATE_KEY }}' > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+      - name: init-known-hosts
+        run: echo '${{ secrets.AZURE_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+      - name: setup-env-file
+        run: echo '${{ secrets.ENV_FILE }}' > ./.env
+      - name: docker-compose-build
+        run: source ./.env && docker compose build
+      - name: docker-tag-images
+        run: docker tag app-nginx securecart/nginx && \ 
+            docker tag app-frontend securecart/frontend && \
+            docker tag app-db securecart/db && \
+            docker tag app-api securecart/api && \
+            docker tag app-minio-setup securecart/minio-setup && \
+            docker tag app-db-setup securecart/db-setup && \
+            docker tag app-minio securecart/minio
+      - name: export-images
+        run: docker save -o images.tar securecart/db securecart/frontend \
+          securecart/api securecart/minio-setup securecart/minio
+      - name: copy-config-to-vm
+        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'mkdir -p app' && scp images.tar ./.env prod.compose.yml '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app/'
+      - name: import-images
+        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && docker load -i images.tar'
   deploy:
     runs-on: ubuntu-latest
     steps:
@@ -14,10 +42,6 @@ jobs:
         run: mkdir -p ~/.ssh && echo '${{ secrets.AZURE_SSH_PRIVATE_KEY }}' > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
       - name: init-known-hosts
         run: echo '${{ secrets.AZURE_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
-      - name: copy-to-vm
-        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS}}' 'mkdir -p app && rm -rf app' && scp -r . '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app'
-      - name: setup-env-file
-        run: echo '${{ secrets.ENV_FILE }}' > ./env-file && scp ./env-file '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app/.env'
       - name: deploy-app
-        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && chmod +x ./run-dev.sh && (yes no | BUILD=true FORCE_RECREATE=true ./run-dev.sh)'
+        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}' 'cd app && COMPOSE_BAKE=true docker compose -f prod.compose.yml up --no-build'
 
