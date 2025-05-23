@@ -17,7 +17,7 @@ jobs:
       - name: setup-env-file
         run: echo '${{ secrets.ENV_FILE }}' > ./.env
       - name: docker-compose-build
-        run: source ./.env && docker compose build
+        run: source ./.env && COMPOSE_BAKE=true docker compose build
       - name: docker-tag-images
         run: docker tag app-nginx securecart/nginx && \ 
             docker tag app-frontend securecart/frontend && \
