@@ -71,7 +71,7 @@ jobs:
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-db
-        uses: snyk/action/docker@master
+        uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
@@ -81,7 +81,7 @@ jobs:
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-api
-        uses: snyk/action/docker@master
+        uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
@@ -91,7 +91,7 @@ jobs:
         with:
           sarif_file: snyk.sarif
       - name: snyk-docker-scan-minio
-        uses: snyk/action/docker@master
+        uses: snyk/actions/docker@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
