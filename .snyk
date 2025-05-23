@@ -1,0 +1,15 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.1
+# ignores vulnerabilities until expiry date; change duration by modifying expiry date
+ignore:
+  SNYK-ALPINE321-LIBXML2-10123179:
+    - '*':
+        reason: unfixable
+        expires: 2025-06-22T11:39:38.675Z
+        created: 2025-05-23T11:39:38.677Z
+  SNYK-ALPINE321-LIBXML2-10123178:
+    - '*':
+        reason: unfixable
+        expires: 2025-06-22T11:39:58.797Z
+        created: 2025-05-23T11:39:58.801Z
+patch: {}
