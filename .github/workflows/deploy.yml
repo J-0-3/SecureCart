@@ -15,7 +15,7 @@ jobs:
       - name: init-known-hosts
         run: echo '${{ secrets.AZURE_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
       - name: copy-to-vm
-        run: scp -r . '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app'
+        run: ssh '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS}}' 'mkdir -p app && rm -rf app' && scp -r . '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app'
       - name: setup-env-file
         run: echo '${{ secrets.ENV_FILE }}' > ./env-file && scp ./env-file '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app/.env'
       - name: deploy-app
