@@ -13,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: init-ssh
+      - name: init-ssh-key
         run: mkdir -p ~/.ssh && echo '${{ secrets.AZURE_SSH_PRIVATE_KEY }}' >> ~/.ssh/id_ed25519
+      - name: init-known-hosts
+        run: echo '${{ secrets.AZURE_SSH_KNOWN_HOSTS }}' >> ~/.ssh/known_hosts
       - name: copy-to-vm
         run: scp -r . '${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_IP_ADDRESS }}:app'
