@@ -34,4 +34,49 @@ jobs:
       - name: build
         run: npx tsc
 
+  snyk-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: snyk/actions/setup@master
+      - name: snyk-code-test
+        run: snyk code test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  snyk-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker-compose-build
+        run: COMPOSE_BUILD=true docker compose build
+      - name: snyk-docker-scan-nginx
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: securecart/nginx
+          args: --file=nginx/Dockerfile --policy-path=.snyk
+      - name: snyk-docker-scan-frontend
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: securecart/frontend
+          args: --file=frontend/Dockerfile --policy-path=.snyk
+      - name: snyk-docker-scan-db
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: securecart/db
+          args: --file=backend/db/Dockerfile --policy-path=.snyk
+      - name: snyk-docker-scan-api
+        uses: snyk/actions/docker@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: securecart/api
+          args: --file=backend/api/Dockerfile --policy-path=.snyk
+
 
